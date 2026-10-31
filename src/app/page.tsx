@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Features, HomeOptions, RecentProjects } from "@/components/home-options";
 import { TopBar } from "@/components/top-bar";
 
@@ -30,6 +31,19 @@ export default function Home() {
       </main>
       <footer className="border-t border-hairline py-6 text-center text-xs text-fg-3">
         Demo audio: &ldquo;Houston We Have a Podcast&rdquo;, courtesy of NASA. Not affiliated with or endorsed by NASA.
+        <span className="mt-2 block">
+          <Link href="/privacy" className="hover:text-accent">
+            Privacy Policy
+          </Link>
+          {" · "}
+          <Link href="/terms" className="hover:text-accent">
+            Terms of Service
+          </Link>
+          {" · "}
+          <a href="https://github.com/Ultranmus/recut" className="hover:text-accent">
+            GitHub
+          </a>
+        </span>
       </footer>
     </>
   );

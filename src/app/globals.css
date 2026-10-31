@@ -293,3 +293,28 @@ textarea.field:focus {
 ::selection {
   background: rgba(10, 132, 255, 0.4);
 }
+
+/* Privacy Policy and Terms */
+.legal h2 {
+  margin-top: 2rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.legal a {
+  color: var(--accent);
+}
+.legal a:hover {
+  text-decoration: underline;
+}
+.legal strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.legal code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.08);
+}

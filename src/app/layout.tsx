@@ -36,6 +36,8 @@ export const metadata: Metadata = {
   },
   appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
+  // Google Search Console ownership check (needed to verify the domain for the OAuth consent screen).
+  verification: process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : undefined,
 };
 
 export const viewport: Viewport = {
