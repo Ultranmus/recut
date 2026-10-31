@@ -151,7 +151,12 @@ export async function groqJSON(body: Record<string, unknown>, apiKey: string): P
     }
     if (!res.ok) {
       const msg = await groqError(res);
-      if (res.status === 400 && /failed to generate json/i.test(msg) && badJson++ < 3) continue;
+      // Groq rejects malformed JSON as "failed to generate/validate JSON". It's transient: retry, and
+      // after two misses on one model, give the next model a turn.
+      if (res.status === 400 && /failed to (generate|validate) json|json_validate_failed|tool_use_failed/i.test(msg) && badJson++ < 4) {
+        if (badJson >= 2) limitedUntil.set(model, Date.now() + 20_000);
+        continue;
+      }
       // A request too large for one model's per-minute budget: try the next model.
       if (res.status === 413) {
         limitedUntil.set(model, Date.now() + 60_000);
@@ -181,10 +186,17 @@ export async function runAnalysis(
 ): Promise<Analysis> {
   const windows = windowsFor(transcript);
   const parts: Record<string, unknown>[] = [];
+  let lastError: unknown = null;
   for (const w of windows) {
     onProgress?.(w.index, windows.length);
-    parts.push(await groqJSON(buildAnalysisRequest(w, transcript, name, rules, learnings), apiKey));
+    try {
+      parts.push(await groqJSON(buildAnalysisRequest(w, transcript, name, rules, learnings), apiKey));
+    } catch (err) {
+      // One bad stretch of a long episode shouldn't throw away the clips found in the rest.
+      lastError = err;
+    }
   }
+  if (!parts.length) throw lastError ?? new Error("Analysis failed.");
   onProgress?.(windows.length, windows.length);
   const first = parts[0] ?? {};
   const analysis = normalizeAnalysis(
