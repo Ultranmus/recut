@@ -4,8 +4,8 @@ import type { BrandRule, Learning } from "./brand-rules";
 import { createListStore } from "./local-store";
 
 /** Brand Memory belongs to the creator, not a project, so it lives in this browser across all projects. */
-const rulesStore = createListStore<BrandRule>("repurpose-studio:brand-memory");
-const learningsStore = createListStore<Learning>("repurpose-studio:learnings");
+const rulesStore = createListStore<BrandRule>("recut:brand-memory");
+const learningsStore = createListStore<Learning>("recut:learnings");
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
 

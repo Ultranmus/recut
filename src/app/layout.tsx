@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Repurpose Studio",
+  title: "Recut",
   description: "Turn long podcasts and videos into short clips with captions for every platform.",
 };
 

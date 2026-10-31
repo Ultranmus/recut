@@ -17,7 +17,7 @@ export default function Home() {
             <span className="text-fg">A week of shorts.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-fg-2 sm:text-base">
-            Upload a podcast or video. Repurpose Studio transcribes it, finds the moments worth sharing, and writes a
+            Upload a podcast or video. Recut transcribes it, finds the moments worth sharing, and writes a
             caption for Instagram Reels, LinkedIn, X and YouTube Shorts.
           </p>
         </div>

@@ -23,7 +23,7 @@ export const demoProject: Project = {
   },
 };
 
-const DB = "repurpose-studio";
+const DB = "recut";
 const STORE = "projects";
 
 function open(): Promise<IDBDatabase> {

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 /** The user's own Groq key lives only in this browser's localStorage. */
-const KEY = "repurpose-studio:groq-key";
+const KEY = "recut:groq-key";
 const listeners = new Set<() => void>();
 
 function read(): string | null {

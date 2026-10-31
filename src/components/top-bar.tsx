@@ -18,7 +18,7 @@ export function Logo() {
   );
 }
 
-const OPEN_SETTINGS = "repurpose:open-settings";
+const OPEN_SETTINGS = "recut:open-settings";
 
 /** Lets any component open the settings sheet without prop drilling. */
 export function openSettings() {
@@ -41,7 +41,7 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
       <div className="mx-auto flex h-13 max-w-[1600px] items-center gap-4 px-4 sm:px-5">
         <Link href="/" className="flex items-center gap-2.5 rounded-lg pr-1 transition-opacity hover:opacity-85">
           <Logo />
-          <span className="text-[15px] font-semibold tracking-tight">Repurpose Studio</span>
+          <span className="text-[15px] font-semibold tracking-tight">Recut</span>
         </Link>
         <div className="flex min-w-0 flex-1 items-center">{children}</div>
         {keyLabel ? (

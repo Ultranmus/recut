@@ -24,7 +24,7 @@ const ALL_PLATFORMS = PLATFORMS.map((p) => p.id);
 type Tab = "captions" | "brand" | "transcript";
 
 // Versioned so edits saved against an older caption schema are ignored.
-const DEMO_EDITS = "repurpose-studio:demo-clips:v2";
+const DEMO_EDITS = "recut:demo-clips:v2";
 
 function loadDemoEdits(): Clip[] | null {
   try {

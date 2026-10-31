@@ -1,8 +1,8 @@
-# Repurpose Studio
+# Recut
 
-Turn one long podcast or video into a week of short clips. Repurpose Studio transcribes your episode, picks the 5–8 moments worth sharing, and writes a caption for Instagram Reels, LinkedIn, X and YouTube Shorts. You brief it by voice, like you'd brief a video editor.
+Turn one long podcast or video into a week of short clips. Recut transcribes your episode, picks the 5–8 moments worth sharing, and writes a caption for Instagram Reels, LinkedIn, X and YouTube Shorts. You brief it by voice, like you'd brief a video editor.
 
-**Live demo:** [repurpose.vercel.app](https://repurpose.vercel.app)
+**Live demo:** [recutapp.vercel.app](https://recutapp.vercel.app)
 
 ## What it does
 
@@ -33,8 +33,8 @@ The free tier is enough to run everything. On free-tier rate limits the app auto
 Requires Node.js 20.9 or later.
 
 ```bash
-git clone https://github.com/Ultranmus/repurpose-studio.git
-cd repurpose-studio
+git clone https://github.com/Ultranmus/recut.git
+cd recut
 npm install
 cp .env.example .env.local   # then paste your key after GROQ_API_KEY=
 npm run dev
@@ -61,7 +61,7 @@ Next.js 16 (App Router), React 19, Tailwind CSS 4, Groq (`whisper-large-v3-turbo
 
 ## Credits
 
-Demo audio and artwork: *Houston We Have a Podcast*, courtesy of NASA. Repurpose Studio is not affiliated with or endorsed by NASA.
+Demo audio and artwork: *Houston We Have a Podcast*, courtesy of NASA. Recut is not affiliated with or endorsed by NASA.
 
 ## License
 

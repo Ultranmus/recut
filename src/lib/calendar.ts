@@ -19,7 +19,7 @@ export type CalendarEntry = {
   createdAt: number;
 };
 
-const store = createListStore<CalendarEntry>("repurpose-studio:calendar");
+const store = createListStore<CalendarEntry>("recut:calendar");
 
 export const useCalendar = store.use;
 export const getCalendar = store.read;
