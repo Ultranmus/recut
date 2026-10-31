@@ -29,6 +29,27 @@ export default function Home() {
           <HomeOptions />
         </div>
         <RecentProjects />
+        <section className="mt-16" aria-labelledby="demo-video-title">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="label">See it in action</p>
+              <h2 id="demo-video-title" className="mt-1 font-display text-xl font-semibold tracking-tight">
+                Recut in under two minutes
+              </h2>
+            </div>
+            <p className="text-xs text-fg-3">Upload, clips, captions, voice briefs, brand memory and auto-scheduling</p>
+          </div>
+          <div className="glass overflow-hidden rounded-2xl p-1.5">
+            <video
+              className="block aspect-video w-full rounded-xl bg-black"
+              src="/demo/recut-demo.mp4"
+              poster="/demo/recut-demo-poster.jpg"
+              controls
+              playsInline
+              preload="none"
+            />
+          </div>
+        </section>
         <Features />
       </main>
       <footer className="border-t border-hairline py-6 text-center text-xs text-fg-3">

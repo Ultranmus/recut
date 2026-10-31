@@ -2,7 +2,7 @@
 
 Turn one long podcast or video into a week of short clips. Recut transcribes your episode, picks the 5–8 moments worth sharing, and writes a caption for Instagram Reels, LinkedIn, X and YouTube Shorts. You brief it by voice, like you'd brief a video editor.
 
-**Live demo:** [recut.ashvattech.com](https://recut.ashvattech.com)
+**Live demo:** [recut.ashvattech.com](https://recut.ashvattech.com) · **Walkthrough video:** [recut-demo.mp4](https://recut.ashvattech.com/demo/recut-demo.mp4) (under two minutes)
 
 ## What it does
 
