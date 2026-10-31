@@ -16,7 +16,7 @@ import {
   type CaptionStyle,
 } from "@/lib/renderer";
 import type { Clip, Project, Word } from "@/lib/types";
-import { IconChevronLeft, IconDownload, IconFilm, IconPause, IconPlay, IconText, IconWave } from "../icons";
+import { IconDownload, IconFilm, IconPause, IconPlay, IconText, IconWave } from "../icons";
 
 type Graph = {
   ctx: AudioContext;
@@ -429,80 +429,69 @@ export function ClipPreview({
       </div>
 
       {/* Transport */}
-      <div className={`mt-5 w-full ${audioOriginal ? "max-w-[560px]" : "max-w-md"}`}>
-        {audioOriginal ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={toggle}
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-white text-black shadow-[0_8px_24px_-8px_rgba(255,255,255,0.5)] transition-transform active:scale-95"
-              aria-label={playing ? "Pause" : "Play"}
-            >
-              {playing ? <IconPause size={17} /> : <IconPlay size={17} className="translate-x-px" />}
-            </button>
-            <span className="hidden text-[11px] text-fg-3 sm:inline">
-              <kbd className="rounded border border-hairline-strong bg-white/5 px-1 font-sans text-[10px] text-fg-2">Space</kbd> to play
-            </span>
-            <div className="ml-auto flex items-center gap-2" title="Trim moves one word at a time, so clips never start or end mid-word">
-              <span className="label hidden sm:inline">Trim</span>
-              <TrimControl label="Start" value={clip.start} onDec={() => nudge("start", -1)} onInc={() => nudge("start", 1)} />
-              <TrimControl label="End" value={clip.end} onDec={() => nudge("end", -1)} onInc={() => nudge("end", 1)} />
-            </div>
-          </div>
-        ) : (
-        <>
+      <div className="mt-5 w-full max-w-[560px]">
         <div className="flex items-center gap-3">
           <button
             onClick={toggle}
             disabled={exporting}
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-black transition-transform active:scale-95 disabled:opacity-40"
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-white/[0.1] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_8px_22px_-8px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-white/15 backdrop-blur-xl transition-[background-color,transform] duration-200 hover:bg-white/[0.17] active:scale-95 disabled:opacity-40"
             aria-label={playing ? "Pause" : "Play"}
           >
-            {playing ? <IconPause size={15} /> : <IconPlay size={15} className="translate-x-px" />}
+            {playing ? <IconPause size={16} /> : <IconPlay size={16} className="translate-x-px" />}
           </button>
-          <div
-            className="group relative h-6 flex-1 cursor-pointer"
-            onPointerDown={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              seek(clip.start + ((e.clientX - r.left) / r.width) * dur);
-            }}
-          >
-            <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/12">
-              <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
-            </div>
-            <div
-              className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100"
-              style={{ left: `${pct}%` }}
-            />
-          </div>
-          <span className="w-24 shrink-0 text-right font-mono text-xs tabular-nums text-fg-2">
-            {timecode(Math.max(0, time - clip.start))} / {timecode(dur)}
+          {audioOriginal ? (
+            <span className="font-mono text-xs tabular-nums text-fg-2">
+              {timecode(Math.max(0, time - clip.start))} <span className="text-fg-3">/ {timecode(dur)}</span>
+            </span>
+          ) : (
+            <>
+              <div
+                className="group relative h-6 flex-1 cursor-pointer"
+                onPointerDown={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  seek(clip.start + ((e.clientX - r.left) / r.width) * dur);
+                }}
+              >
+                <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/12">
+                  <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
+                </div>
+                <div
+                  className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100"
+                  style={{ left: `${pct}%` }}
+                />
+              </div>
+              <span className="shrink-0 font-mono text-xs tabular-nums text-fg-2">
+                {timecode(Math.max(0, time - clip.start))} <span className="text-fg-3">/ {timecode(dur)}</span>
+              </span>
+            </>
+          )}
+          <span className="ml-auto hidden text-[11px] text-fg-3 sm:inline">
+            <kbd className="rounded border border-hairline-strong bg-white/5 px-1 font-sans text-[10px] text-fg-2">Space</kbd> play / pause
           </span>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <TrimControl label="Start" value={clip.start} onDec={() => nudge("start", -1)} onInc={() => nudge("start", 1)} />
-          {view === "social" ? (
-            <div className="segmented" role="radiogroup" aria-label="Caption style">
-              {CAPTION_STYLES.map((s) => (
-                <button key={s.id} data-active={style === s.id} onClick={() => setStyle(s.id)} role="radio" aria-checked={style === s.id}>
-                  {s.name}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <span className="text-center text-[11px] leading-tight text-fg-3">
-              Trim snaps
-              <br />
-              to word edges
-            </span>
-          )}
-          <TrimControl label="End" value={clip.end} onDec={() => nudge("end", -1)} onInc={() => nudge("end", 1)} />
-        </div>
-        </>
-        )}
+        <TrimStrip
+          words={words}
+          start={clip.start}
+          end={clip.end}
+          total={project.transcript.duration}
+          time={time}
+          disabled={exporting}
+          onTrim={onTrim}
+          onNudge={nudge}
+        />
 
         {view === "social" ? (
           <>
+            <div className="mt-4 flex justify-center">
+              <div className="segmented" role="radiogroup" aria-label="Caption style">
+                {CAPTION_STYLES.map((s) => (
+                  <button key={s.id} data-active={style === s.id} onClick={() => setStyle(s.id)} role="radio" aria-checked={style === s.id}>
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Accent color">
                 {ACCENTS.map((c) => (
@@ -627,19 +616,154 @@ function EqBars() {
   );
 }
 
-function TrimControl({ label, value, onDec, onInc }: { label: string; value: number; onDec: () => void; onInc: () => void }) {
+const MIN_CLIP = 5;
+
+/**
+ * Trim by dragging: the clip sits highlighted inside a waveform of the audio around it, with a
+ * handle at each end. Handles snap to word edges so a clip never starts or ends mid-word, and the
+ * arrow keys move a focused handle one word at a time.
+ */
+function TrimStrip({
+  words,
+  start,
+  end,
+  total,
+  time,
+  disabled,
+  onTrim,
+  onNudge,
+}: {
+  words: Word[];
+  start: number;
+  end: number;
+  total: number;
+  time: number;
+  disabled: boolean;
+  onTrim: (start: number, end: number) => void;
+  onNudge: (edge: "start" | "end", dir: -1 | 1) => void;
+}) {
+  const track = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ edge: "start" | "end"; from: number; to: number } | null>(null);
+  // Pointer moves can arrive before React re-renders with `drag`, so the handlers read these refs.
+  const dragging = useRef<{ edge: "start" | "end"; from: number; span: number } | null>(null);
+  // The visible window is frozen while dragging, so the track doesn't slide under the pointer.
+  const pad = Math.max(12, (end - start) * 0.6);
+  const from = drag?.from ?? Math.max(0, start - pad);
+  const to = drag?.to ?? Math.min(total, end + pad);
+  const span = to - from;
+  const bars = useMemo(() => speechBars(words, from, to, 110), [words, from, to]);
+  const x = (t: number) => `${((t - from) / span) * 100}%`;
+
+  function timeAt(clientX: number) {
+    const r = track.current!.getBoundingClientRect();
+    const d = dragging.current ?? { from, span };
+    return d.from + Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * d.span;
+  }
+
+  function move(edge: "start" | "end", t: number) {
+    if (edge === "start") {
+      const candidates = words.filter((w) => w.start <= end - MIN_CLIP);
+      const w = nearest(candidates, t, "start");
+      if (w && w.start !== start) onTrim(w.start, end);
+    } else {
+      const candidates = words.filter((w) => w.end >= start + MIN_CLIP);
+      const w = nearest(candidates, t, "end");
+      if (w && w.end !== end) onTrim(start, w.end);
+    }
+  }
+
+  const handle = (edge: "start" | "end") => (
+    <button
+      role="slider"
+      aria-label={edge === "start" ? "Clip start" : "Clip end"}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(total)}
+      aria-valuenow={Math.round(edge === "start" ? start : end)}
+      aria-valuetext={timecode(edge === "start" ? start : end)}
+      disabled={disabled}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        dragging.current = { edge, from, span };
+        setDrag({ edge, from, to });
+      }}
+      onPointerMove={(e) => {
+        if (dragging.current?.edge === edge) move(edge, timeAt(e.clientX));
+      }}
+      onPointerUp={(e) => {
+        if (dragging.current?.edge === edge) move(edge, timeAt(e.clientX));
+        dragging.current = null;
+        setDrag(null);
+      }}
+      onPointerCancel={() => {
+        dragging.current = null;
+        setDrag(null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        onNudge(edge, e.key === "ArrowLeft" ? -1 : 1);
+      }}
+      className={`absolute inset-y-0 z-20 flex w-3.5 cursor-ew-resize touch-none items-center justify-center bg-accent outline-none transition-colors hover:bg-[#3d9eff] focus-visible:ring-2 focus-visible:ring-white ${
+        edge === "start" ? "-translate-x-full rounded-l-md" : "rounded-r-md"
+      }`}
+      style={{ left: x(edge === "start" ? start : end) }}
+    >
+      <span className="h-4 w-[3px] rounded-full bg-white/80" />
+    </button>
+  );
+
   return (
-    <div className="flex h-9 items-center rounded-lg border border-hairline bg-white/[0.04]">
-      <button className="grid h-full w-7 place-items-center rounded-l-lg text-fg-2 hover:bg-white/8 hover:text-fg" onClick={onDec} aria-label={`${label} one word earlier`}>
-        <IconChevronLeft size={14} />
-      </button>
-      <div className="min-w-[3.25rem] px-0.5 text-center leading-none">
-        <p className="text-[9px] font-semibold uppercase tracking-wide text-fg-3">{label}</p>
-        <p className="mt-0.5 font-mono text-[12px] tabular-nums">{timecode(value)}</p>
+    <div className="mt-4">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="label">Trim</span>
+        <span className="text-[11px] text-fg-3">Drag the handles · snaps to word edges</span>
       </div>
-      <button className="grid h-full w-7 place-items-center rounded-r-lg text-fg-2 hover:bg-white/8 hover:text-fg" onClick={onInc} aria-label={`${label} one word later`}>
-        <IconChevronLeft size={14} className="rotate-180" />
-      </button>
+      <div className="px-3.5">
+        <div ref={track} className="relative h-14 select-none">
+          <div className="absolute inset-0 flex items-center gap-[2px] overflow-hidden rounded-md bg-white/[0.03]">
+            {Array.from(bars, (h, i) => {
+              const t = from + ((i + 0.5) / bars.length) * span;
+              const inside = t >= start && t <= end;
+              return (
+                <span
+                  key={i}
+                  className={`flex-1 rounded-full ${inside ? "bg-accent/75" : "bg-white/15"}`}
+                  style={{ height: `${Math.max(8, h * 82)}%` }}
+                />
+              );
+            })}
+          </div>
+          {/* Selected range frame */}
+          <div
+            className={`pointer-events-none absolute inset-y-0 z-10 border-y-2 border-accent ${drag ? "bg-accent/10" : ""}`}
+            style={{ left: x(start), width: `${((end - start) / span) * 100}%` }}
+          />
+          {time >= from && time <= to ? (
+            <span className="pointer-events-none absolute -inset-y-1 z-10 w-0.5 rounded-full bg-white shadow-[0_0_6px_white]" style={{ left: x(time) }} />
+          ) : null}
+          {handle("start")}
+          {handle("end")}
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between font-mono text-[11px] tabular-nums">
+        <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-fg-2">
+          <span className="font-sans text-fg-3">Start </span>
+          {timecode(start)}
+        </span>
+        <span className="text-fg-3">{duration(end - start)} selected</span>
+        <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-fg-2">
+          <span className="font-sans text-fg-3">End </span>
+          {timecode(end)}
+        </span>
+      </div>
     </div>
   );
+}
+
+function nearest(words: Word[], t: number, key: "start" | "end") {
+  let best: Word | undefined;
+  for (const w of words) if (!best || Math.abs(w[key] - t) < Math.abs(best[key] - t)) best = w;
+  return best;
 }
