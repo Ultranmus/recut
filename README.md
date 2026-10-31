@@ -2,7 +2,7 @@
 
 Turn one long podcast or video into a week of short clips. Repurpose Studio transcribes your episode, picks the 5–8 moments worth sharing, and writes a caption for Instagram Reels, LinkedIn, X and YouTube Shorts. You brief it by voice, like you'd brief a video editor.
 
-**Live demo:** _LIVE_URL_
+**Live demo:** [repurpose.vercel.app](https://repurpose.vercel.app)
 
 ## What it does
 
@@ -33,7 +33,7 @@ The free tier is enough to run everything. On free-tier rate limits the app auto
 Requires Node.js 20.9 or later.
 
 ```bash
-git clone _REPO_URL_.git
+git clone https://github.com/Ultranmus/repurpose-studio.git
 cd repurpose-studio
 npm install
 cp .env.example .env.local   # then paste your key after GROQ_API_KEY=
