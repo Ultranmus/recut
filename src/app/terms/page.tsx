@@ -12,7 +12,7 @@ export default function TermsPage() {
   return (
     <LegalPage title="Terms of Service" updated="31 October 2026">
       <p>
-        These terms cover your use of Recut at recutapp.vercel.app. By using Recut you agree to them. Recut is an open-source project
+        These terms cover your use of Recut at recut.ashvattech.com. By using Recut you agree to them. Recut is an open-source project
         released under the MIT License; these terms are about the hosted app.
       </p>
 

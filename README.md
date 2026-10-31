@@ -2,7 +2,7 @@
 
 Turn one long podcast or video into a week of short clips. Recut transcribes your episode, picks the 5–8 moments worth sharing, and writes a caption for Instagram Reels, LinkedIn, X and YouTube Shorts. You brief it by voice, like you'd brief a video editor.
 
-**Live demo:** [recutapp.vercel.app](https://recutapp.vercel.app) (also at [repurpose.vercel.app](https://repurpose.vercel.app))
+**Live demo:** [recut.ashvattech.com](https://recut.ashvattech.com)
 
 ## What it does
 
@@ -57,7 +57,7 @@ Uploads are decoded in the browser and sent to Whisper in chunks of about 2 minu
 
 Import the repo on [Vercel](https://vercel.com/new) and add `GROQ_API_KEY` as an environment variable. Nothing else is required.
 
-Optionally set `NEXT_PUBLIC_SITE_URL` (e.g. `https://recutapp.vercel.app`) so link previews and the sitemap use your preferred domain; otherwise the project's production domain is used.
+Optionally set `NEXT_PUBLIC_SITE_URL` (e.g. `https://recut.ashvattech.com`) so link previews and the sitemap use your preferred domain; otherwise the project's production domain is used.
 
 **Google Calendar sync (optional).** To turn on "Connect Google Calendar", create an OAuth client in Google Cloud: enable the Google Calendar API, set up the consent screen (add yourself as a test user), then create a *Web application* client whose authorized JavaScript origins include your site URL. Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to its client ID. Sign-in happens in the browser with Google Identity Services, so no client secret is needed and the access token never reaches the server.
 

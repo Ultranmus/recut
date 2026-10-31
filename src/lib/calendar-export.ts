@@ -7,7 +7,7 @@ import { PLATFORMS, type Clip } from "./types";
  * file that Google, Apple and Outlook calendars all import. Each event carries the captions to post.
  */
 
-const appUrl = () => (typeof window === "undefined" ? "https://recutapp.vercel.app" : window.location.origin);
+const appUrl = () => (typeof window === "undefined" ? "https://recut.ashvattech.com" : window.location.origin);
 
 function compact(date: string, time: string) {
   return `${date.replace(/-/g, "")}T${time.replace(":", "")}00`;
