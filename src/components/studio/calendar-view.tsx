@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Learning } from "@/lib/brand-rules";
 import { addDays, isoDate, moveEntry, parseIso, schedule, startOfWeek, unschedule, type CalendarEntry } from "@/lib/calendar";
 import { googleCalendarUrl, toIcs } from "@/lib/calendar-export";
@@ -41,6 +41,7 @@ export function CalendarView({
 }) {
   const [adding, setAdding] = useState<string | null>(null);
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
+  const feedbackEntry = feedbackFor ? entries.find((e) => e.id === feedbackFor) : undefined;
   const [dragOver, setDragOver] = useState<string | null>(null);
   const today = isoDate(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -177,9 +178,9 @@ export function CalendarView({
                       {e.clipTitle}
                     </button>
                     {!local ? <p className="mt-0.5 truncate text-[10px] text-fg-3">{e.projectName}</p> : null}
-                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                       <span
-                        className="flex items-center gap-1"
+                        className="flex min-w-0 items-center gap-1"
                         title={(e.platforms.length ? PLATFORMS.filter((p) => e.platforms.includes(p.id)) : PLATFORMS).map((p) => p.name).join(", ")}
                       >
                         {(e.platforms.length ? PLATFORMS.filter((p) => e.platforms.includes(p.id)) : PLATFORMS).map((p) => (
@@ -194,7 +195,7 @@ export function CalendarView({
                       {!badge && local ? (
                         <button
                           className="shrink-0 text-[10px] text-fg-3 opacity-0 transition-opacity hover:text-accent group-hover:opacity-100 focus:opacity-100"
-                          onClick={() => setFeedbackFor(feedbackFor === e.id ? null : e.id)}
+                          onClick={() => setFeedbackFor(e.id)}
                         >
                           How did it do?
                         </button>
@@ -205,17 +206,6 @@ export function CalendarView({
                         <span className={`rounded px-1.5 py-px font-semibold ${badge.cls}`}>{badge.text}</span>
                         <span className="truncate text-fg-3">{learning?.metric}</span>
                       </p>
-                    ) : null}
-                    {feedbackFor === e.id ? (
-                      <FeedbackForm
-                        busy={busy}
-                        onCancel={() => setFeedbackFor(null)}
-                        onSave={(sentence) => {
-                          setFeedbackFor(null);
-                          onFeedback(e, sentence);
-                        }}
-                        entry={e}
-                      />
                     ) : null}
                   </article>
                 );
@@ -236,6 +226,18 @@ export function CalendarView({
           );
         })}
       </div>
+
+      {feedbackEntry ? (
+        <FeedbackDialog
+          entry={feedbackEntry}
+          busy={busy}
+          onClose={() => setFeedbackFor(null)}
+          onSave={(sentence) => {
+            setFeedbackFor(null);
+            onFeedback(feedbackEntry, sentence);
+          }}
+        />
+      ) : null}
 
       {adding ? (
         <ScheduleDialog
@@ -265,57 +267,149 @@ export function CalendarView({
   );
 }
 
-function FeedbackForm({
+const OUTCOMES = [
+  { id: "hit", label: "Hit", hint: "Beat your usual numbers", icon: "▲", on: "border-success/60 bg-success/10 text-success" },
+  { id: "average", label: "OK", hint: "About what you expected", icon: "●", on: "border-white/30 bg-white/[0.08] text-fg" },
+  { id: "flop", label: "Flop", hint: "Fell short", icon: "▼", on: "border-danger/60 bg-danger/10 text-danger" },
+] as const;
+
+/**
+ * "How did it do?": the result becomes a sentence sent through the studio chat, where it's saved as
+ * a learning and re-ranks clips, exactly as if the creator had said it.
+ */
+function FeedbackDialog({
   entry,
   busy,
   onSave,
-  onCancel,
+  onClose,
 }: {
   entry: CalendarEntry;
   busy: boolean;
   onSave: (sentence: string) => void;
-  onCancel: () => void;
+  onClose: () => void;
 }) {
-  const [outcome, setOutcome] = useState<"hit" | "average" | "flop">("hit");
+  const ref = useRef<HTMLDialogElement>(null);
+  const posted = entry.platforms.length ? PLATFORMS.filter((p) => entry.platforms.includes(p.id)) : PLATFORMS;
+  const [outcome, setOutcome] = useState<(typeof OUTCOMES)[number]["id"]>("hit");
+  const [platform, setPlatform] = useState(posted.length === 1 ? posted[0].id : "");
   const [views, setViews] = useState("");
-  const platform = PLATFORMS.find((p) => entry.platforms.length === 1 && p.id === entry.platforms[0]);
+  const [note, setNote] = useState("");
   const when = parseIso(entry.date).toLocaleDateString("en-US", { weekday: "long" });
+
+  useEffect(() => {
+    const d = ref.current;
+    if (d?.open && !d.matches(":modal")) d.removeAttribute("open");
+    if (d && !d.open) d.showModal();
+  }, []);
+
+  function save() {
+    const p = PLATFORMS.find((x) => x.id === platform);
+    const result = outcome === "hit" ? "did really well" : outcome === "flop" ? "flopped" : "did okay";
+    onSave(
+      `The "${entry.clipTitle}" clip we posted ${when}${p ? ` on ${p.name}` : ""} ${result}${
+        views ? `, it got ${Number(views).toLocaleString("en-US")} views` : ""
+      }.${note.trim() ? ` ${note.trim()}` : ""}`
+    );
+  }
+
   return (
-    <div className="mt-2 space-y-2 rounded-lg bg-black/30 p-2">
-      <div className="segmented w-full">
-        {(["hit", "average", "flop"] as const).map((o) => (
-          <button key={o} data-active={outcome === o} onClick={() => setOutcome(o)} className="flex-1 px-1 capitalize">
-            {o === "average" ? "OK" : o}
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(e) => e.target === ref.current && onClose()}
+      className="m-auto max-h-[92dvh] w-[min(94vw,28rem)] overflow-hidden rounded-2xl bg-transparent p-0 text-fg backdrop:bg-black/55 backdrop:backdrop-blur-sm"
+      aria-label="How did it do?"
+    >
+      <div className="window rise flex max-h-[92dvh] flex-col overflow-hidden rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-hairline px-5 py-3.5">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold">How did it do?</h2>
+            <p className="truncate text-xs text-fg-3">
+              {entry.clipTitle} · posted {parseIso(entry.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+            </p>
+          </div>
+          <button className="btn btn-ghost h-8 w-8 shrink-0 p-0" onClick={onClose} aria-label="Close">
+            <IconClose size={16} />
           </button>
-        ))}
+        </div>
+
+        <div className="scroll-thin min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          <fieldset>
+            <legend className="label mb-2">Result</legend>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup">
+              {OUTCOMES.map((o) => (
+                <button
+                  key={o.id}
+                  role="radio"
+                  aria-checked={outcome === o.id}
+                  onClick={() => setOutcome(o.id)}
+                  className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${
+                    outcome === o.id ? o.on : "border-hairline bg-white/[0.03] text-fg-2 hover:border-hairline-strong hover:text-fg"
+                  }`}
+                >
+                  <span className="text-base leading-none">{o.icon}</span>
+                  <span className="text-sm font-semibold">{o.label}</span>
+                  <span className="text-[10px] leading-tight text-fg-3">{o.hint}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          {posted.length > 1 ? (
+            <fieldset>
+              <legend className="label mb-2">Where</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {[{ id: "", name: "All platforms", color: "" }, ...posted].map((p) => (
+                  <button
+                    key={p.id || "all"}
+                    onClick={() => setPlatform(p.id)}
+                    aria-pressed={platform === p.id}
+                    className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                      platform === p.id ? "border-accent bg-accent text-white" : "border-hairline bg-white/[0.03] text-fg-2 hover:border-hairline-strong hover:text-fg"
+                    }`}
+                  >
+                    {p.color ? <span className="size-1.5 rounded-full" style={{ background: p.color }} /> : null}
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
+
+          <label className="block">
+            <span className="label">Views (optional)</span>
+            <input
+              className="field mt-2"
+              inputMode="numeric"
+              placeholder="e.g. 40,000"
+              value={views ? Number(views).toLocaleString("en-US") : ""}
+              onChange={(e) => setViews(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
+            />
+          </label>
+
+          <label className="block">
+            <span className="label">What do you think happened? (optional)</span>
+            <textarea
+              className="field mt-2 h-auto resize-none py-2.5 leading-relaxed"
+              rows={2}
+              maxLength={300}
+              placeholder="e.g. The hook landed in the first second"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+          <p className="text-[11px] leading-relaxed text-fg-3">Saved as a learning in Brand memory, and used to re-rank clips here and in future uploads.</p>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-hairline px-5 py-3.5">
+          <button className="btn btn-ghost h-9 text-xs" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary h-9 text-xs" disabled={busy} onClick={save}>
+            Save result
+          </button>
+        </div>
       </div>
-      <input
-        className="field h-8 px-2 text-xs"
-        inputMode="numeric"
-        placeholder="Views (optional)"
-        value={views}
-        onChange={(e) => setViews(e.target.value.replace(/[^\d]/g, ""))}
-        aria-label="Views"
-      />
-      <div className="flex gap-1">
-        <button className="btn btn-ghost h-7 flex-1 px-2 text-[11px]" onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          className="btn btn-primary h-7 flex-1 px-2 text-[11px]"
-          disabled={busy}
-          onClick={() => {
-            const result = outcome === "hit" ? "did really well" : outcome === "flop" ? "flopped" : "did okay";
-            onSave(
-              `The "${entry.clipTitle}" clip we posted ${when}${platform ? ` on ${platform.name}` : ""} ${result}${
-                views ? `, it got ${Number(views).toLocaleString("en-US")} views` : ""
-              }.`
-            );
-          }}
-        >
-          Save
-        </button>
-      </div>
-    </div>
+    </dialog>
   );
 }
