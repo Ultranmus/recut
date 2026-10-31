@@ -5,6 +5,66 @@ import { maskKey, setGroqKey, useGroqKey } from "@/lib/settings";
 import { useServerKey } from "@/lib/use-server-key";
 import { IconCheck, IconClose, IconEye, IconEyeOff, IconKey, IconLock } from "./icons";
 
+const LOCAL_KEYS = ["recut:demo-clips:v2", "recut:brand-memory", "recut:learnings", "recut:calendar"];
+
+/** Reset the demo, or wipe everything this browser stores. Two-step confirm instead of a blocking dialog. */
+function DataControls() {
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+
+  function resetDemo() {
+    try {
+      localStorage.removeItem("recut:demo-clips:v2");
+    } catch {}
+    setDone("Demo episode reset to its original clips and captions.");
+    if (location.pathname === "/studio/demo") location.reload();
+  }
+
+  async function wipe() {
+    try {
+      LOCAL_KEYS.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase("recut");
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    });
+    setConfirming(false);
+    setDone("All projects, rules, learnings and calendar posts were removed from this browser.");
+    // A full reload (not router.push) so no in-memory project or store state survives the wipe.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    setTimeout(() => location.assign("/"), 900);
+  }
+
+  return (
+    <section className="space-y-2.5 border-t border-hairline pt-4">
+      <p className="text-sm font-medium">Your data</p>
+      <p className="text-xs leading-relaxed text-fg-3">
+        Projects, Brand Memory, learnings and the calendar are stored only in this browser.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button className="btn btn-secondary h-8 text-xs" onClick={resetDemo}>
+          Reset demo episode
+        </button>
+        {confirming ? (
+          <>
+            <button className="btn h-8 bg-danger text-xs text-white hover:bg-danger/90" onClick={wipe}>
+              Yes, delete everything
+            </button>
+            <button className="btn btn-ghost h-8 text-xs" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button className="btn btn-ghost h-8 text-xs text-danger" onClick={() => setConfirming(true)}>
+            Clear all my data
+          </button>
+        )}
+      </div>
+      {done ? <p className="text-xs text-success">{done}</p> : null}
+    </section>
+  );
+}
+
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const userKey = useGroqKey();
@@ -144,6 +204,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               {userKey ? "Your key" : serverKey ? "Server key (.env)" : serverKey === false ? "None, add one above" : "…"}
             </span>
           </div>
+
+          <DataControls />
         </div>
       </div>
     </dialog>

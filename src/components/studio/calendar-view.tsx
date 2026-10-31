@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { Learning } from "@/lib/brand-rules";
 import { addDays, isoDate, moveEntry, parseIso, schedule, startOfWeek, unschedule, type CalendarEntry } from "@/lib/calendar";
+import { googleCalendarUrl, toIcs } from "@/lib/calendar-export";
+import { download } from "@/lib/format";
 import { PLATFORMS, type Clip, type PlatformId, type Project } from "@/lib/types";
 import { IconChevronLeft, IconClose } from "../icons";
 
@@ -61,21 +63,36 @@ export function CalendarView({
             Say “post the Gateway clip on Tuesday” above, or add one here. Drag a post to move it.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="mr-1 text-sm font-medium tabular-nums">{range}</span>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <button
+            className="btn btn-secondary order-last h-8 px-3 text-xs max-sm:w-full sm:order-none"
+            disabled={!inWeek.length}
+            title="Imports into Google Calendar, Apple Calendar or Outlook, with a reminder 30 minutes before each timed post"
+            onClick={() =>
+              download(
+                new Blob([toIcs(inWeek, (e) => (e.projectId === project.id ? clips.find((c) => c.id === e.clipId) : undefined))], {
+                  type: "text/calendar",
+                }),
+                `recut-week-${isoDate(weekStart)}.ics`
+              )
+            }
+          >
+            Export week (.ics)
+          </button>
           <button className="btn btn-secondary h-8 w-8 p-0" onClick={() => onWeekChange(addDays(weekStart, -7))} aria-label="Previous week">
             <IconChevronLeft size={15} />
+          </button>
+          <span className="flex-1 text-center text-sm font-medium tabular-nums sm:mx-1 sm:flex-none">{range}</span>
+          <button className="btn btn-secondary h-8 w-8 p-0" onClick={() => onWeekChange(addDays(weekStart, 7))} aria-label="Next week">
+            <IconChevronLeft size={15} className="rotate-180" />
           </button>
           <button className="btn btn-secondary h-8 px-3 text-xs" onClick={() => onWeekChange(startOfWeek(new Date()))}>
             Today
           </button>
-          <button className="btn btn-secondary h-8 w-8 p-0" onClick={() => onWeekChange(addDays(weekStart, 7))} aria-label="Next week">
-            <IconChevronLeft size={15} className="rotate-180" />
-          </button>
         </div>
       </header>
 
-      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-white/[0.04] sm:grid-cols-7">
+      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-px bg-white/[0.04] sm:grid-cols-2 lg:grid-cols-7 xl:overflow-y-auto">
         {days.map((d) => {
           const iso = isoDate(d);
           const dayEntries = inWeek.filter((e) => e.date === iso).sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
@@ -95,7 +112,9 @@ export function CalendarView({
                 const id = e.dataTransfer.getData("text/entry");
                 if (id) moveEntry(id, iso);
               }}
-              className={`flex min-h-40 flex-col gap-2 bg-[#121215] p-2.5 transition-colors ${dragOver === iso ? "bg-accent/10" : ""} ${
+              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:min-h-24 lg:min-h-40 ${
+                past && !dayEntries.length ? "max-lg:hidden" : ""
+              } ${dragOver === iso ? "bg-accent/10" : ""} ${
                 past ? "opacity-70" : ""
               }`}
             >
@@ -142,6 +161,19 @@ export function CalendarView({
                       {e.clipTitle}
                     </button>
                     {!local ? <p className="mt-0.5 truncate text-[10px] text-fg-3">{e.projectName}</p> : null}
+                    <a
+                      href={googleCalendarUrl(e, local ? clips.find((c) => c.id === e.clipId) : undefined)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-[10px] text-fg-3 hover:text-accent"
+                      title="Opens Google Calendar with this post, its time and the captions to publish"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                        <path d="M3.5 10h17M8 3v4M16 3v4" />
+                      </svg>
+                      Add to Google Calendar
+                    </a>
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {(e.platforms.length ? PLATFORMS.filter((p) => e.platforms.includes(p.id)) : PLATFORMS).map((p) => (
                         <span key={p.id} className="flex items-center gap-1 rounded bg-white/6 px-1 py-px text-[9px] text-fg-2">

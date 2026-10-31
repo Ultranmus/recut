@@ -62,8 +62,9 @@ export async function transcribeFile(
 ): Promise<Transcript> {
   onProgress({ stage: "decode", value: 0, detail: "Extracting audio" });
   const pcm = await decodeToMono(file);
-  const chunks = splitIntoChunks(pcm);
   const duration = pcm.length / SAMPLE_RATE;
+  if (duration < 15) throw new Error("This file is under 15 seconds. Upload at least 30 seconds of talking to find clips.");
+  const chunks = splitIntoChunks(pcm);
 
   onProgress({ stage: "transcribe", value: 0, detail: `0 of ${chunks.length} parts` });
   const results: GroqTranscription[] = new Array(chunks.length);

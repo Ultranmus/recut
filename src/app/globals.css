@@ -260,6 +260,15 @@ textarea.field:focus {
   animation: shimmer 2s linear infinite;
 }
 
+@keyframes eq {
+  from {
+    transform: scaleY(0.25);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
 @keyframes pulse-ring {
   0% {
     box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.45);

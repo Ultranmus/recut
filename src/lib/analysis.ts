@@ -11,6 +11,13 @@ export const ANALYSIS_MODEL = "openai/gpt-oss-120b";
 export const TRANSCRIBE_MODEL = "whisper-large-v3-turbo";
 
 const MIN_CLIP = 18;
+
+/** Short uploads can't hold five 30-second clips, so clip targets scale with the episode. */
+function clipBounds(duration: number) {
+  if (duration >= 300) return { min: MIN_CLIP, low: 25, high: 75, ideal: "30-60", want: 0 };
+  if (duration >= 120) return { min: 12, low: 15, high: 45, ideal: "20-35", want: 5 };
+  return { min: 6, low: 8, high: 30, ideal: "10-20", want: 3 };
+}
 const MAX_CLIP = 90;
 export const MIN_CLIPS = 5;
 export const MAX_CLIPS = 8;
@@ -50,7 +57,8 @@ export function buildAnalysisRequest(
   const last = w.segments[w.segments.length - 1];
   // Aim for 5-8 clips overall; extra candidates from long episodes are ranked and trimmed later.
   // Models treat ranges as permission to return the minimum, so ask each part for an exact count.
-  const want = w.count === 1 ? 7 : w.count === 2 ? 4 : 3;
+  const bounds = clipBounds(transcript.duration);
+  const want = bounds.want || (w.count === 1 ? 7 : w.count === 2 ? 4 : 3);
   const part =
     w.count === 1
       ? "the full transcript"
@@ -75,7 +83,7 @@ Return JSON:
 "hashtags":["5 tags without #"]}]}
 
 Rules:
-- Return exactly ${want} clips, best first, each 25-75 seconds long (end minus start, ideally 30-60), no overlaps. Include enough lines for the setup and the payoff.
+- Return exactly ${want} clips, best first, each ${bounds.low}-${bounds.high} seconds long (end minus start, ideally ${bounds.ideal}), no overlaps. Include enough lines for the setup and the payoff.
 - "why" must name the specific thing that makes this moment work (the surprising fact, the story, the strong claim), not generic praise.
 - Skip ads, subscribe reminders, intros, outros and credits. Only return fewer than ${want} if this part truly has no other self-contained moment.
 - Start where a sentence starts; end on a complete thought. Favor surprising facts, strong opinions, stories, quotable lines.
@@ -239,7 +247,7 @@ export function normalizeAnalysis(raw: unknown, transcript: Transcript): Analysi
     const start = nearest(segs, s, "start").start;
     let end = nearest(segs, e, "end").end;
     if (end - start > MAX_CLIP) end = nearest(segs, start + MAX_CLIP - 5, "end").end;
-    if (end - start < MIN_CLIP) continue;
+    if (end - start < clipBounds(transcript.duration).min) continue;
     if (clips.some((k) => start < k.end && end > k.start)) continue;
 
     const cap = (c.captions ?? {}) as Record<string, unknown>;
@@ -289,13 +297,14 @@ const SIGNALS = /\b(here's the thing|the problem|the reason|the key|interesting|
 export function fallbackAnalysis(transcript: Transcript, title = ""): Analysis {
   const segs = transcript.segments;
   const lead = Math.min(60, transcript.duration * 0.08);
+  const span = Math.min(50, Math.max(10, transcript.duration * 0.3));
   const windows: { start: number; end: number; text: string; score: number }[] = [];
   for (let i = 0; i < segs.length; i++) {
     if (segs[i].start < lead || segs[i].start > transcript.duration - lead) continue;
     let j = i;
-    while (j + 1 < segs.length && segs[j + 1].end - segs[i].start <= 50) j++;
+    while (j + 1 < segs.length && segs[j + 1].end - segs[i].start <= span) j++;
     const dur = segs[j].end - segs[i].start;
-    if (dur < 25) continue;
+    if (dur < Math.min(25, span * 0.5)) continue;
     const text = segs.slice(i, j + 1).map((s) => s.text).join(" ");
     const hits = text.match(SIGNALS)?.length ?? 0;
     const opener = /^[A-Z]/.test(segs[i].text) ? 2 : 0;

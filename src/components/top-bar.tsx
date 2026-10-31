@@ -38,10 +38,10 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-hairline bg-[rgba(14,14,17,0.72)] backdrop-blur-2xl backdrop-saturate-150">
-      <div className="mx-auto flex h-13 max-w-[1600px] items-center gap-4 px-4 sm:px-5">
+      <div className="mx-auto flex h-13 max-w-[1600px] items-center gap-2 px-3 sm:gap-4 sm:px-5">
         <Link href="/" className="flex items-center gap-2.5 rounded-lg pr-1 transition-opacity hover:opacity-85">
           <Logo />
-          <span className="text-[15px] font-semibold tracking-tight">Recut</span>
+          <span className={`text-[15px] font-semibold tracking-tight ${children ? "max-sm:hidden" : ""}`}>Recut</span>
         </Link>
         <div className="flex min-w-0 flex-1 items-center">{children}</div>
         {keyLabel ? (

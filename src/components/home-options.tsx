@@ -56,8 +56,8 @@ export function HomeOptions() {
           ))}
         </div>
 
-        <div className="mt-auto flex items-center justify-between pt-6">
-          <span className="text-xs text-fg-3">Pre-transcribed with Groq Whisper</span>
+        <div className="mt-auto flex flex-col-reverse items-stretch gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-center text-xs text-fg-3 sm:text-left">Pre-transcribed with Groq Whisper</span>
           <span className="btn btn-primary">
             <IconPlay size={13} /> Try the demo episode
           </span>

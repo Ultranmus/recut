@@ -113,7 +113,17 @@ function useCopy() {
   return {
     copied,
     copy: async (key: string, text: string) => {
-      await navigator.clipboard.writeText(text);
+      if (!text.trim()) return;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = Object.assign(document.createElement("textarea"), { value: text });
+        document.body.append(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        if (!ok) return setCopied(`${key}:failed`);
+      }
       setCopied(key);
     },
   };
@@ -262,7 +272,7 @@ export function CaptionPanel({
                 aria-label={`Copy ${p.name} caption`}
               >
                 {copied === p.id ? <IconCheck size={13} className="text-success" /> : <IconCopy size={13} />}
-                {copied === p.id ? "Copied" : "Copy"}
+                {copied === p.id ? "Copied" : copied === `${p.id}:failed` ? "Copy blocked" : "Copy"}
               </button>
             </div>
             {pending[p.id] ? (

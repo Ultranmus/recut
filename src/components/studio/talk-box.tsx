@@ -9,9 +9,11 @@ import { IconCheck, IconSparkle } from "../icons";
 
 export type BriefState = "idle" | "parsing" | "writing" | "done" | "error";
 
+const MAX_CHARS = 4000;
+
 const EXAMPLES = [
   "Okay so um, I want to, uh, post the bit about the Gateway space station. Put it on LinkedIn, no wait, actually make that X and Instagram. Keep it, like, curious and kind of playful, but you know, not cheesy. Oh and, um, from now on no emojis, ever. And always say NASA's Gateway, not just Gateway.",
-  "Um, so post the Gateway clip on Tuesday, uh, on X at like 9am. And the political risk one, put that on Thursday, no wait, Friday. Oh and the Cold War clip we posted last week got, like, forty thousand views on Reels, and the humans versus robots one totally flopped.",
+  "Um, so post the Gateway clip on Tuesday, uh, on X at like 9am. And the political risk one, put that on Thursday, no wait, Friday. Oh and the Cold War clip we posted last week got, like, forty thousand views on Reels, and the humans versus robots one totally flopped. Anyway my coffee machine broke this morning, whatever.",
 ];
 
 function MicIcon({ size = 16 }: { size?: number }) {
@@ -31,6 +33,7 @@ export function TalkToStudio({
   targetClip,
   summary,
   onSubmit,
+  onClear,
 }: {
   state: BriefState;
   error: string | null;
@@ -39,6 +42,7 @@ export function TalkToStudio({
   targetClip: Clip | null;
   summary: string[];
   onSubmit: (raw: string) => void;
+  onClear: () => void;
 }) {
   const [text, setText] = useState("");
   const [example, setExample] = useState(0);
@@ -51,6 +55,19 @@ export function TalkToStudio({
   const recorder = useRef<MediaRecorder | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const busy = state === "parsing" || state === "writing";
+
+  // "/" anywhere jumps to the brief box, so the creator can hold fn and talk straight away.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || el.closest("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      setOpen(true);
+      requestAnimationFrame(() => area.current?.focus());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!recording) return;
@@ -113,7 +130,12 @@ export function TalkToStudio({
             <MicIcon size={16} />
           </span>
           <div>
-            <h2 className="text-[15px] font-semibold tracking-tight">Talk to your studio</h2>
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+              Talk to your studio
+              <kbd className="hidden rounded border border-hairline-strong bg-white/5 px-1.5 font-sans text-[10px] font-normal text-fg-3 sm:inline" title="Press / to focus">
+                /
+              </kbd>
+            </h2>
             <p className="text-xs text-fg-3">
               Brief it like a video editor. Hold <kbd className="rounded border border-hairline-strong bg-white/5 px-1 font-sans text-[10px] text-fg-2">fn</kbd> to dictate
               with Wispr Flow; filler words and “no wait, actually…” are handled.
@@ -133,7 +155,7 @@ export function TalkToStudio({
               <textarea
                 ref={area}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
@@ -145,6 +167,11 @@ export function TalkToStudio({
                 className="field scroll-thin h-full min-h-28 resize-none bg-black/30 py-3 text-[15px] leading-relaxed placeholder:text-fg-3"
                 aria-label="Spoken brief"
               />
+              {text.length > MAX_CHARS * 0.85 ? (
+                <span className="absolute bottom-2 right-3 text-[10px] tabular-nums text-warning">
+                  {text.length}/{MAX_CHARS}
+                </span>
+              ) : null}
               {recording ? (
                 <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-danger/15 px-2.5 py-1 text-[11px] font-medium text-danger">
                   <span className="size-1.5 animate-pulse rounded-full bg-danger" /> Listening {seconds}s
@@ -172,6 +199,19 @@ export function TalkToStudio({
               >
                 Try a messy example{example ? ` (${(example % EXAMPLES.length) + 1}/${EXAMPLES.length})` : ""}
               </button>
+              {text || brief ? (
+                <button
+                  className="btn btn-ghost h-8 px-2.5 text-xs"
+                  disabled={busy}
+                  onClick={() => {
+                    setText("");
+                    onClear();
+                    area.current?.focus();
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
               <span className="ml-auto hidden text-[11px] text-fg-3 sm:inline">⌘↵</span>
               <button className="btn btn-primary h-8 text-xs" onClick={submit} disabled={!text.trim() || busy}>
                 <IconSparkle size={14} />
@@ -306,6 +346,17 @@ export function TalkToStudio({
                           <span className="mx-1.5 text-fg-3">→</span>
                           <span>{c.to}</span>
                         </p>
+                      ))}
+                    </dd>
+                  </>
+                ) : null}
+
+                {brief?.digressions?.length ? (
+                  <>
+                    <dt className="text-fg-3">Set aside</dt>
+                    <dd className="space-y-0.5 text-[12px] text-fg-3">
+                      {brief.digressions.map((d) => (
+                        <p key={d}>“{d}”</p>
                       ))}
                     </dd>
                   </>

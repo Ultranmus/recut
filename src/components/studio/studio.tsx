@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLearnings, addRules, getLearnings, getRules, useBrandRules, useLearnings } from "@/lib/brand-memory";
-import { parseIso, schedule, startOfWeek, useCalendar } from "@/lib/calendar";
+import { addDays, isoDate, parseIso, schedule, startOfWeek, useCalendar } from "@/lib/calendar";
 import { enforceRules, type BrandRule } from "@/lib/brand-rules";
 import { paginate, wordsInRange } from "@/lib/captions";
 import { duration } from "@/lib/format";
@@ -105,6 +105,16 @@ export function Studio({ id }: { id: string }) {
     [project, clip]
   );
   const pages = useMemo(() => paginate(clipWords), [clipWords]);
+
+  /** This week, unless nothing is left on it and a later post exists: then that post's week. */
+  function weekWithNextPost() {
+    const thisWeek = startOfWeek(new Date());
+    const today = isoDate(new Date());
+    const upcoming = calendar.map((e) => e.date).filter((d) => d >= today).sort();
+    const endOfWeek = isoDate(addDays(thisWeek, 6));
+    if (!upcoming.length || upcoming[0] <= endOfWeek) return thisWeek;
+    return startOfWeek(parseIso(upcoming[0]));
+  }
 
   const badges: ClipBadges = {};
   if (project) {
@@ -400,21 +410,30 @@ export function Studio({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col lg:h-dvh lg:min-h-0 lg:flex-none lg:overflow-hidden">
+    <div className="flex flex-1 flex-col xl:h-dvh xl:min-h-0 xl:flex-none xl:overflow-hidden">
       <TopBar>
-        <div className="flex min-w-0 items-center gap-2 border-l border-hairline pl-4 text-sm">
-          <Link href="/" className="btn btn-ghost h-7 gap-1 px-2 text-xs" aria-label="Back to home">
-            <IconChevronLeft size={14} /> Home
+        <div className="flex min-w-0 items-center gap-1.5 border-l border-hairline pl-2 text-sm sm:gap-2 sm:pl-4">
+          <Link href="/" className="btn btn-ghost h-7 gap-1 px-1.5 text-xs sm:px-2" aria-label="Back to home">
+            <IconChevronLeft size={14} /> <span className="hidden sm:inline">Home</span>
           </Link>
           <span className="hidden truncate font-medium text-fg-2 sm:inline">{project.name}</span>
-          <div className="segmented ml-2 shrink-0" role="tablist" aria-label="View">
+          <div className="segmented shrink-0 sm:ml-2" role="tablist" aria-label="View">
             {(
               [
                 ["studio", "Studio"],
                 ["calendar", "Calendar"],
               ] as const
             ).map(([v, label]) => (
-              <button key={v} role="tab" aria-selected={view === v} data-active={view === v} onClick={() => setView(v)}>
+              <button
+                key={v}
+                role="tab"
+                aria-selected={view === v}
+                data-active={view === v}
+                onClick={() => {
+                  if (v === "calendar" && view !== "calendar") setWeekStart(weekWithNextPost());
+                  setView(v);
+                }}
+              >
                 {label}
                 {v === "calendar" && calendar.length ? <span className="ml-1.5 text-fg-3">{calendar.length}</span> : null}
               </button>
@@ -427,7 +446,7 @@ export function Studio({ id }: { id: string }) {
         <div className="border-b border-warning/20 bg-warning/10 px-5 py-2 text-center text-xs text-warning">{project.notice}</div>
       ) : null}
 
-      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-4 lg:min-h-0 lg:overflow-hidden">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:p-4 xl:min-h-0 xl:overflow-hidden">
       <TalkToStudio
         state={briefState}
         error={briefError}
@@ -436,6 +455,12 @@ export function Studio({ id }: { id: string }) {
         targetClip={clips.find((c) => c.id === briefClipId) ?? null}
         summary={summary}
         onSubmit={runBrief}
+        onClear={() => {
+          setBrief(null);
+          setSummary([]);
+          setBriefError(null);
+          setBriefState("idle");
+        }}
       />
       {view === "calendar" ? (
         <CalendarView
@@ -454,7 +479,7 @@ export function Studio({ id }: { id: string }) {
           onFeedback={(_, sentence) => void runBrief(sentence)}
         />
       ) : (
-      <main className="grid flex-1 gap-4 lg:min-h-0 lg:grid-cols-[300px_minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
+      <main className="grid flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:min-h-0 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
         {/* Left: episode + clips */}
         <aside className="glass flex min-h-0 flex-col overflow-hidden rounded-2xl">
           <div className="border-b border-hairline p-4">
@@ -489,7 +514,7 @@ export function Studio({ id }: { id: string }) {
             <h2 className="label">Clips</h2>
             <span className="text-[11px] text-fg-3">{clips.length} moments · ranked</span>
           </div>
-          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 max-lg:max-h-80">
+          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 max-lg:max-h-96 lg:max-xl:max-h-[46rem]">
             <ClipList clips={clips} selectedId={clip?.id ?? ""} onSelect={setSelectedId} badges={badges} />
             <p className="mt-3 flex items-center gap-1.5 px-2 text-[11px] text-fg-3">
               <IconScissors size={12} /> Make your own from any line in Transcript.
@@ -498,7 +523,7 @@ export function Studio({ id }: { id: string }) {
         </aside>
 
         {/* Center: preview */}
-        <section className="glass flex min-h-0 flex-col overflow-y-auto overscroll-contain rounded-2xl px-4 py-6 scroll-thin">
+        <section className="glass flex min-h-0 flex-col rounded-2xl px-3 py-5 scroll-thin sm:px-4 sm:py-6 xl:overflow-y-auto xl:overscroll-contain">
           {clip && mediaUrl ? (
             <div className="flex flex-col gap-5">
               <ClipDetails clip={clip} rank={clip.score ? clips.indexOf(clip) + 1 : 0} onChange={updateClip} />
@@ -526,7 +551,7 @@ export function Studio({ id }: { id: string }) {
         </section>
 
         {/* Right: inspector */}
-        <aside className="glass flex min-h-0 flex-col overflow-hidden rounded-2xl">
+        <aside className="glass flex min-h-0 flex-col overflow-hidden rounded-2xl lg:col-span-2 xl:col-span-1">
           <div className="border-b border-hairline p-3">
             <div className="segmented w-full" role="tablist">
               {(
@@ -554,7 +579,7 @@ export function Studio({ id }: { id: string }) {
               ))}
             </div>
           </div>
-          <div data-scroll className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+          <div data-scroll className="scroll-thin min-h-0 flex-1 p-4 xl:overflow-y-auto xl:overscroll-contain">
             {clip ? (
               tab === "captions" ? (
                 <CaptionPanel
@@ -614,9 +639,9 @@ export function StudioSkeleton() {
   return (
     <>
       <div className="h-13 border-b border-hairline" />
-      <div className="mx-auto grid w-full max-w-[1600px] flex-1 gap-4 p-4 lg:h-[calc(100vh-52px)] lg:grid-cols-[300px_minmax(0,1fr)_380px]">
+      <div className="mx-auto grid w-full max-w-[1600px] flex-1 gap-4 p-4 xl:h-[calc(100vh-52px)] xl:grid-cols-[300px_minmax(0,1fr)_380px]">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="glass animate-pulse rounded-2xl opacity-60 max-lg:h-64" />
+          <div key={i} className="glass animate-pulse rounded-2xl opacity-60 max-xl:h-64" />
         ))}
       </div>
     </>

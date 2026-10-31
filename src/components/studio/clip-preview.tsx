@@ -169,7 +169,10 @@ export function ClipPreview({
     if (!m) return;
     ensureGraph();
     if (m.currentTime < clip.start - 0.1 || m.currentTime >= clip.end - 0.1) m.currentTime = clip.start;
-    void m.play();
+    m.play().catch((err: unknown) => {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setError("Playback was blocked by the browser. Tap play again.");
+    });
   }
 
   function toggle() {
@@ -301,6 +304,7 @@ export function ClipPreview({
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onLoadedMetadata={(e) => (e.currentTarget.currentTime = clip.start)}
+          onError={() => setError("Couldn't load this episode's media. Refresh the page, or re-upload the file if it was removed.")}
         />
       )}
 
@@ -328,6 +332,7 @@ export function ClipPreview({
                 onPlay={() => setPlaying(true)}
                 onPause={() => setPlaying(false)}
                 onLoadedMetadata={(e) => (e.currentTarget.currentTime = clip.start)}
+          onError={() => setError("Couldn't load this episode's media. Refresh the page, or re-upload the file if it was removed.")}
               />
             ) : (
               <span className="flex flex-col items-center gap-5 bg-gradient-to-b from-white/[0.06] to-transparent px-6 pb-6 pt-7">

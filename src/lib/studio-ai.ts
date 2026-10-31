@@ -45,6 +45,7 @@ export type ParsedBrief = {
   feedback: BriefFeedback[];
   corrections: { from: string; to: string }[];
   fillers: string[];
+  digressions: string[];
 };
 
 export type RewriteMode = "brief" | "rules";
@@ -110,18 +111,20 @@ ${rulesPrompt(rules) || "(none)"}
 Return JSON:
 {"cleaned":"the brief rewritten as 1-3 clear sentences, fillers removed and corrections applied",
 "wantsCaptions":<true only if the creator asked to write, rewrite or restyle captions/posts>,
-"topic":"what the content should focus on, or empty string",
+"topic":"what the creator wants content written about, only if they asked for captions/posts; otherwise empty string",
 "clipIds":["ids of the clips that best match the topic, best first, max 3; [] if no topic"],
 "platforms":["subset of reels|linkedin|x|shorts the creator wants captions for; [] means all"],
-"tone":"short tone description for this content, or empty string",
+"tone":"tone the creator explicitly described, or empty string; never infer one",
 "rules":["NEW lasting brand rules as short imperative sentences, e.g. 'Never use emojis.'"],
 "schedule":[{"clipQuery":"how they referred to the clip","clipId":"matching id or empty","day":<day number from the calendar list above>,"time":"HH:MM 24h or empty","platforms":["platform ids, [] if unspecified"]}],
 "feedback":[{"clipQuery":"how they referred to the clip","clipId":"matching id or empty","platform":"platform id or empty","views":<number or null>,"outcome":"hit|average|flop","metric":"the result in a few words, e.g. '40K views'","lesson":"one generalizable takeaway about what works or doesn't for this creator, based on the clip's topic and hook, max 20 words"}],
 "corrections":[{"from":"what they first said","to":"what they settled on"}],
-"fillers":["distinct filler words or phrases you ignored, max 8"]}
+"fillers":["distinct filler words or phrases you ignored, max 8"],
+"digressions":["off-topic tangents you set aside, each paraphrased in under 8 words, e.g. 'aside about their cat'"]}
 
 How to read the brief:
 - Ignore fillers (um, uh, like, you know, so, basically, I mean, kind of, sort of, okay so) and false starts.
+- Digressions: set aside tangents that aren't instructions (stories, asides, thinking out loud, unrelated chatter). List them in "digressions" and never act on them.
 - Self-corrections: the LAST version wins. Phrases like "no wait", "actually", "scratch that", "sorry", "I mean", "make that", "not X, Y" replace what came before. Record each one in "corrections" and never act on the replaced part.
 - A brand rule must hold for all future content: words like always, never, every time, from now on, our brand, we don't, no <thing>. A one-off request for this post ("make this one funny") is tone, not a rule.
 - "Post/schedule X on <day>" is a schedule entry. Resolve weekdays and relative days ("Tuesday", "tomorrow", "next Friday") to a day number from the calendar list; a bare weekday means its next occurrence (today counts if it is that day).
@@ -185,6 +188,7 @@ How to read the brief:
     feedback,
     corrections,
     fillers: asStrings(r.fillers, 8),
+    digressions: asStrings(r.digressions, 5),
   };
 }
 

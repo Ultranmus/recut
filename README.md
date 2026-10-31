@@ -2,16 +2,16 @@
 
 Turn one long podcast or video into a week of short clips. Recut transcribes your episode, picks the 5–8 moments worth sharing, and writes a caption for Instagram Reels, LinkedIn, X and YouTube Shorts. You brief it by voice, like you'd brief a video editor.
 
-**Live demo:** [recutapp.vercel.app](https://recutapp.vercel.app)
+**Live demo:** [recutapp.vercel.app](https://recutapp.vercel.app) (also at [repurpose.vercel.app](https://repurpose.vercel.app))
 
 ## What it does
 
 - **Finds the moments.** Groq Whisper transcribes with word-level timestamps, then an LLM ranks self-contained clips. Each one shows its start/end time, a hook line, and why it was picked.
 - **Previews without cutting.** Clips play straight from the original file between their timestamps. An optional 9:16 view adds animated captions and can export a vertical video in the browser.
 - **Writes per-platform captions.** Each platform gets its own length and tone, and every caption is editable.
-- **Talk to your studio.** Dictate a brief with [Wispr Flow](https://wisprflow.ai) (or the built-in mic). Filler words and self-corrections ("LinkedIn, no wait, X") are handled, and it shows what it understood: topic, platform, tone and brand rules.
+- **Talk to your studio.** Press `/`, hold `fn` and dictate a brief with [Wispr Flow](https://wisprflow.ai) (or use the built-in mic). Filler words, digressions and self-corrections ("LinkedIn, no wait, X") are handled, and it shows what it understood: topic, platform, tone and brand rules, plus what it corrected, set aside and ignored.
 - **Brand Memory.** Rules like "no emojis" are saved, including rules learned from your own caption edits. New captions must follow them, and any change a rule makes is shown as a before/after.
-- **Weekly calendar.** Say "post the Gateway clip on Tuesday" and it appears on Tuesday.
+- **Weekly calendar.** Say "post the Gateway clip on Tuesday" and it appears on Tuesday. Each post has an **Add to Google Calendar** link pre-filled with the captions to publish, and **Export week (.ics)** imports into Google, Apple or Outlook calendars with a reminder before each post.
 - **Performance feedback.** Say "it got 40,000 views" or "it flopped". The result is saved as a learning and used to rank clips here and in future uploads.
 
 ## Demo mode
