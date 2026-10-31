@@ -215,15 +215,28 @@ export function ClipPreview({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // Latest trim, updated as soon as a nudge happens: key repeat can fire several presses before
+  // React re-renders, and each press must step from the previous one, not from the stale prop.
+  const trim = useRef({ id: clip.id, start: clip.start, end: clip.end });
+  useEffect(() => {
+    trim.current = { id: clip.id, start: clip.start, end: clip.end };
+  }, [clip.id, clip.start, clip.end]);
+
   function nudge(edge: "start" | "end", dir: -1 | 1) {
+    const { start, end } = trim.current.id === clip.id ? trim.current : clip;
+    const list = dir < 0 ? [...words].reverse() : words;
     if (edge === "start") {
-      const list = dir < 0 ? [...words].reverse() : words;
-      const w = list.find((x) => (dir < 0 ? x.start < clip.start - 0.05 : x.start > clip.start + 0.05));
-      if (w && clip.end - w.start >= 5) onTrim(w.start, clip.end);
+      const w = list.find((x) => (dir < 0 ? x.start < start - 0.05 : x.start > start + 0.05));
+      if (w && end - w.start >= 5) {
+        trim.current = { id: clip.id, start: w.start, end };
+        onTrim(w.start, end);
+      }
     } else {
-      const list = dir < 0 ? [...words].reverse() : words;
-      const w = list.find((x) => (dir < 0 ? x.end < clip.end - 0.05 : x.end > clip.end + 0.05));
-      if (w && w.end - clip.start >= 5) onTrim(clip.start, w.end);
+      const w = list.find((x) => (dir < 0 ? x.end < end - 0.05 : x.end > end + 0.05));
+      if (w && w.end - start >= 5) {
+        trim.current = { id: clip.id, start, end: w.end };
+        onTrim(start, w.end);
+      }
     }
   }
 
@@ -627,6 +640,13 @@ function EqBars() {
 
 const MIN_CLIP = 5;
 
+/** 833.03 → "13:53.0". Trim moves a word at a time, often under a second, so show tenths. */
+function preciseTime(t: number) {
+  const m = Math.floor(t / 60);
+  const sec = t - m * 60;
+  return `${m}:${sec.toFixed(1).padStart(4, "0")}`;
+}
+
 /**
  * Trim by dragging: the clip sits highlighted inside a waveform of the audio around it, with a
  * handle at each end. Handles snap to word edges so a clip never starts or ends mid-word, and the
@@ -654,7 +674,7 @@ function TrimStrip({
   const track = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ edge: "start" | "end"; from: number; to: number } | null>(null);
   // Pointer moves can arrive before React re-renders with `drag`, so the handlers read these refs.
-  const dragging = useRef<{ edge: "start" | "end"; from: number; span: number } | null>(null);
+  const dragging = useRef<{ edge: "start" | "end"; from: number; span: number; x: number; moved: boolean } | null>(null);
   // The visible window is frozen while dragging, so the track doesn't slide under the pointer.
   const pad = Math.max(12, (end - start) * 0.6);
   const from = drag?.from ?? Math.max(0, start - pad);
@@ -662,6 +682,9 @@ function TrimStrip({
   const span = to - from;
   const bars = useMemo(() => speechBars(words, from, to, 110), [words, from, to]);
   const x = (t: number) => `${((t - from) / span) * 100}%`;
+  const inside = words.filter((w) => w.start >= start - 0.05 && w.end <= end + 0.05);
+  const firstWord = inside.slice(0, 3).map((w) => w.word).join(" ");
+  const lastWord = inside.slice(-3).map((w) => w.word).join(" ");
 
   function timeAt(clientX: number) {
     const r = track.current!.getBoundingClientRect();
@@ -688,20 +711,29 @@ function TrimStrip({
       aria-valuemin={0}
       aria-valuemax={Math.round(total)}
       aria-valuenow={Math.round(edge === "start" ? start : end)}
-      aria-valuetext={timecode(edge === "start" ? start : end)}
+      aria-valuetext={preciseTime(edge === "start" ? start : end)}
+      title={edge === "start" ? `Starts on “${firstWord}”` : `Ends on “${lastWord}”`}
       disabled={disabled}
       onPointerDown={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        // preventDefault (which stops text selection while dragging) also skips the browser's
+        // focus-on-press, so focus explicitly: the arrow keys only work on a focused handle.
+        e.currentTarget.focus({ preventScroll: true });
         e.currentTarget.setPointerCapture(e.pointerId);
-        dragging.current = { edge, from, span };
+        dragging.current = { edge, from, span, x: e.clientX, moved: false };
         setDrag({ edge, from, to });
       }}
       onPointerMove={(e) => {
-        if (dragging.current?.edge === edge) move(edge, timeAt(e.clientX));
+        const d = dragging.current;
+        if (d?.edge !== edge) return;
+        // A plain click (to focus the handle for the arrow keys) shouldn't nudge the trim.
+        if (!d.moved && Math.abs(e.clientX - d.x) < 3) return;
+        d.moved = true;
+        move(edge, timeAt(e.clientX));
       }}
       onPointerUp={(e) => {
-        if (dragging.current?.edge === edge) move(edge, timeAt(e.clientX));
+        if (dragging.current?.edge === edge && dragging.current.moved) move(edge, timeAt(e.clientX));
         dragging.current = null;
         setDrag(null);
       }}
@@ -756,17 +788,24 @@ function TrimStrip({
           {handle("end")}
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-between font-mono text-[11px] tabular-nums">
-        <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-fg-2">
-          <span className="font-sans text-fg-3">Start </span>
-          {timecode(start)}
+      <div className="mt-2 flex items-start justify-between gap-3 text-[11px]">
+        <span className="min-w-0">
+          <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono tabular-nums text-fg-2">
+            <span className="font-sans text-fg-3">Start </span>
+            {preciseTime(start)}
+          </span>
+          <span className="mt-1 block truncate text-fg-3">“{firstWord}…”</span>
         </span>
-        <span className="text-fg-3">{duration(end - start)} selected</span>
-        <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-fg-2">
-          <span className="font-sans text-fg-3">End </span>
-          {timecode(end)}
+        <span className="shrink-0 pt-0.5 font-mono tabular-nums text-fg-3">{(end - start).toFixed(1)}s selected</span>
+        <span className="min-w-0 text-right">
+          <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono tabular-nums text-fg-2">
+            <span className="font-sans text-fg-3">End </span>
+            {preciseTime(end)}
+          </span>
+          <span className="mt-1 block truncate text-fg-3">“…{lastWord}”</span>
         </span>
       </div>
+      <p className="mt-1.5 text-center text-[10px] text-fg-3">Click a handle, then use ← → to move it one word at a time.</p>
     </div>
   );
 }
