@@ -732,7 +732,7 @@ export function Studio({ id }: { id: string }) {
           gcal={gcal}
         />
       ) : (
-      <main className="grid flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:min-h-0 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
+      <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:min-h-0 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
         {/* Left: episode + clips */}
         <aside className="glass flex min-h-0 flex-col overflow-hidden rounded-2xl">
           <div className="border-b border-hairline p-4">
