@@ -405,11 +405,14 @@ export function ClipDetails({
           </div>
           <label className="mt-3 block">
             <span className="label">Hook</span>
-            <input
-              className="mt-1 w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 -mx-1 text-[17px] font-semibold leading-snug tracking-tight text-fg outline-none transition-colors hover:border-hairline focus:border-accent/60 focus:bg-black/25"
+            {/* Grows with the text, so a long hook wraps instead of being cut off. */}
+            <textarea
+              // Fallback where field-sizing isn't supported (older Safari): long hooks get two lines.
+              rows={clip.hook.length > 45 ? 2 : 1}
+              className="mt-1 block w-full resize-none rounded-md border border-transparent bg-transparent px-1 py-0.5 -mx-1 text-[17px] font-semibold leading-snug tracking-tight text-fg outline-none transition-colors [field-sizing:content] hover:border-hairline focus:border-accent/60 focus:bg-black/25"
               value={clip.hook}
               maxLength={90}
-              onChange={(e) => onChange({ ...clip, hook: e.target.value })}
+              onChange={(e) => onChange({ ...clip, hook: e.target.value.replace(/\n/g, " ") })}
             />
           </label>
           {clip.rankNote && clip.baseScore !== undefined && clip.score !== clip.baseScore ? (
