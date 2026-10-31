@@ -146,7 +146,16 @@ export function ClipPreview({
     m.currentTime = clip.start;
   }, [clip.id, clip.start]);
 
-  useEffect(() => () => void graph.current?.ctx.close(), []);
+  // Suspend rather than close: Next keeps this page alive when you navigate away, and the media element
+  // stays wired to this AudioContext for good, so a closed context would leave playback silent on return.
+  // play() resumes it.
+  useEffect(
+    () => () => {
+      const ctx = graph.current?.ctx;
+      if (ctx && ctx.state === "running") void ctx.suspend().catch(() => {});
+    },
+    []
+  );
 
   function ensureGraph() {
     const m = mediaRef.current;

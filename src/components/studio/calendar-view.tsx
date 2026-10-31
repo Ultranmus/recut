@@ -90,7 +90,7 @@ export function CalendarView({
         </div>
       </header>
 
-      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-px bg-white/[0.04] sm:grid-cols-2 lg:grid-cols-7 xl:overflow-y-auto">
+      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 sm:grid-cols-2 lg:grid-cols-7 lg:gap-px lg:bg-white/[0.04] lg:p-0 xl:overflow-y-auto">
         {days.map((d) => {
           const iso = isoDate(d);
           const dayEntries = inWeek.filter((e) => e.date === iso).sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
@@ -110,8 +110,8 @@ export function CalendarView({
                 const id = e.dataTransfer.getData("text/entry");
                 if (id) moveEntry(id, iso);
               }}
-              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:min-h-24 lg:min-h-40 lg:pb-16 ${
-                past && !dayEntries.length ? "max-lg:hidden" : ""
+              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:rounded-xl max-lg:border max-lg:border-hairline lg:min-h-40 lg:pb-16 ${
+                past && !dayEntries.length ? "" : "max-lg:min-h-24"
               } ${dragOver === iso ? "bg-accent/10" : ""} ${
                 past ? "opacity-70" : ""
               }`}
@@ -208,6 +208,7 @@ export function CalendarView({
                 );
               })}
 
+              {past && !dayEntries.length ? <p className="px-0.5 text-[11px] text-fg-3">No posts</p> : null}
               {past ? null : (
                 <button
                   className="mt-auto rounded-lg border border-dashed border-white/10 py-1.5 text-[11px] text-fg-3 transition-colors hover:border-accent/50 hover:bg-accent/5 hover:text-fg"

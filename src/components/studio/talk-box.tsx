@@ -6,6 +6,7 @@ import { getGroqKey } from "@/lib/settings";
 import type { ParsedBrief } from "@/lib/studio-ai";
 import { PLATFORMS, type Clip } from "@/lib/types";
 import { IconCheck, IconClose, IconSparkle, IconTrash } from "../icons";
+import { formatTime } from "./schedule-dialog";
 
 export type BriefState = "idle" | "parsing" | "writing" | "done" | "error";
 export type BriefTarget = "captions" | "calendar" | "brand";
@@ -441,7 +442,7 @@ function Reply({
                   <span>
                     <span className="font-medium">
                       {new Date(`${s.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-                      {s.time ? ` · ${s.time}` : ""}
+                      {s.time ? ` · ${formatTime(s.time)}` : ""}
                     </span>{" "}
                     {s.clipId ? (
                       <>

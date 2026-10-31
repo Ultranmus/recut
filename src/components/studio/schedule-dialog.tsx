@@ -4,17 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { addDays, isoDate, parseIso } from "@/lib/calendar";
 import { timecode } from "@/lib/format";
 import { PLATFORMS, type Clip, type PlatformId } from "@/lib/types";
-import { IconCheck, IconClose } from "../icons";
+import { IconCheck, IconChevronLeft, IconClose } from "../icons";
 
 export type ScheduleInput = { clip: Clip; date: string; time: string; platforms: PlatformId[] };
 
 const PRESETS = ["09:00", "12:00", "15:00", "18:00", "21:00"];
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
+/** "21:30" → "9:30 PM". Always 12-hour, whatever the browser's locale. */
 export function formatTime(t: string) {
   if (!t) return "";
   const [h, m] = t.split(":").map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
 const dayLabel = (iso: string, opts: Intl.DateTimeFormatOptions) => parseIso(iso).toLocaleDateString(undefined, opts);
@@ -44,21 +45,24 @@ export function ScheduleDialog({
   const [platforms, setPlatforms] = useState<PlatformId[]>(PLATFORMS.map((p) => p.id));
   const clip = clips.find((c) => c.id === selected);
 
-  // Two weeks from today, stretched to include the day it was opened from.
-  const span = Math.max(14, Math.round((parseIso(day).getTime() - parseIso(today).getTime()) / 86_400_000) + 7);
-  const days = Array.from({ length: span }, (_, i) => isoDate(addDays(parseIso(today), i)));
+  // Seven days at a time from today, paged with arrows, starting on the page that holds the chosen day.
+  const daysAhead = Math.round((parseIso(day).getTime() - parseIso(today).getTime()) / 86_400_000);
+  const [page, setPage] = useState(Math.max(0, Math.floor(daysAhead / 7)));
+  const days = Array.from({ length: 7 }, (_, i) => isoDate(addDays(parseIso(today), page * 7 + i)));
+  const pageLabel =
+    page === 0 ? "Next 7 days" : `${dayLabel(days[0], { month: "short", day: "numeric" })} – ${dayLabel(days[6], { month: "short", day: "numeric" })}`;
 
   useEffect(() => {
     const d = ref.current;
+    // Next keeps a page alive in the background after you navigate away. When it's shown again the
+    // dialog is still "open" but no longer modal (no backdrop), so reopen it properly.
+    if (d?.open && !d.matches(":modal")) d.removeAttribute("open");
     if (d && !d.open) d.showModal();
-    // Bring the chosen clip and day into view by scrolling only their own lists. scrollIntoView
-    // would also shift the dialog body sideways and cut off its left edge.
-    d?.querySelectorAll<HTMLElement>("[data-chosen]").forEach((el) => {
-      const list = el.parentElement;
-      if (!list) return;
-      if (list.scrollWidth > list.clientWidth) list.scrollLeft = el.offsetLeft - (list.clientWidth - el.offsetWidth) / 2;
-      else list.scrollTop = el.offsetTop - (list.clientHeight - el.offsetHeight) / 2;
-    });
+    // Bring the chosen clip into view by scrolling only its list. scrollIntoView would also shift
+    // the dialog body and cut off its edge.
+    const el = d?.querySelector<HTMLElement>("[data-chosen]");
+    const list = el?.parentElement;
+    if (el && list) list.scrollTop = el.offsetTop - (list.clientHeight - el.offsetHeight) / 2;
   }, []);
 
   const toggle = (id: PlatformId) => setPlatforms((ps) => (ps.includes(id) ? ps.filter((p) => p !== id) : [...ps, id]));
@@ -120,17 +124,29 @@ export function ScheduleDialog({
           </fieldset>
 
           <fieldset>
-            <legend className="label mb-2">Day</legend>
-            <div className="scroll-thin relative -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5 [mask-image:linear-gradient(to_right,black_88%,transparent)]">
+            <legend className="sr-only">Day</legend>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="label">Day</span>
+              <div className="flex items-center gap-1">
+                <span className="mr-1 text-[11px] text-fg-3">{pageLabel}</span>
+                <button className="btn btn-ghost h-7 w-7 p-0" onClick={() => setPage((p) => p - 1)} disabled={page === 0} aria-label="Previous 7 days">
+                  <IconChevronLeft size={14} />
+                </button>
+                <button className="btn btn-ghost h-7 w-7 p-0" onClick={() => setPage((p) => p + 1)} disabled={page >= 7} aria-label="Next 7 days">
+                  <IconChevronLeft size={14} className="rotate-180" />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
               {days.map((d) => {
                 const on = d === day;
                 return (
                   <button
                     key={d}
-                    data-chosen={on || undefined}
                     onClick={() => setDay(d)}
                     aria-pressed={on}
-                    className={`flex w-14 shrink-0 flex-col items-center rounded-xl border py-2 transition-colors ${
+                    aria-label={dayLabel(d, { weekday: "long", month: "long", day: "numeric" })}
+                    className={`flex min-w-0 flex-col items-center rounded-xl border py-2 transition-colors ${
                       on ? "border-accent bg-accent text-white" : "border-hairline bg-white/[0.03] text-fg-2 hover:border-hairline-strong hover:text-fg"
                     }`}
                   >
@@ -169,21 +185,27 @@ export function ScheduleDialog({
               >
                 Any time
               </button>
-              <select
-                value={custom ? time : ""}
-                onChange={(e) => e.target.value && setTime(e.target.value)}
-                aria-label="Other time"
-                className={`h-8 rounded-lg border bg-transparent px-2.5 text-xs font-medium [color-scheme:dark] ${
-                  custom ? "border-accent bg-accent/15 text-fg" : "border-hairline text-fg-2"
-                }`}
-              >
-                <option value="">Other…</option>
-                {SLOTS.map((t) => (
-                  <option key={t} value={t}>
-                    {formatTime(t)}
-                  </option>
-                ))}
-              </select>
+              <span className="relative inline-flex">
+                <select
+                  value={custom ? time : ""}
+                  onChange={(e) => e.target.value && setTime(e.target.value)}
+                  aria-label="Other time"
+                  className={`h-8 cursor-pointer appearance-none rounded-lg border bg-transparent pl-3 pr-8 text-xs font-medium [color-scheme:dark] ${
+                    custom ? "border-accent bg-accent text-white" : "border-hairline bg-white/[0.03] text-fg-2 hover:border-hairline-strong hover:text-fg"
+                  }`}
+                >
+                  <option value="">Other time</option>
+                  {SLOTS.map((t) => (
+                    <option key={t} value={t}>
+                      {formatTime(t)}
+                    </option>
+                  ))}
+                </select>
+                <IconChevronLeft
+                  size={13}
+                  className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 -rotate-90 ${custom ? "text-white" : "text-fg-3"}`}
+                />
+              </span>
             </div>
           </fieldset>
 

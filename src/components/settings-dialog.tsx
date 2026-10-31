@@ -77,6 +77,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
+    // A page kept alive in the background comes back with the dialog open but not modal; reopen it.
+    if (open && d.open && !d.matches(":modal")) d.removeAttribute("open");
     if (open && !d.open) {
       d.showModal();
       setDraft("");

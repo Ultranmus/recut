@@ -525,6 +525,11 @@ export function TranscriptPanel({
   const markerRef = useRef<HTMLDivElement>(null);
   const opened = useRef(false);
   const firstInClip = segments.findIndex((s) => s.end > clip.start);
+  // Words for the clip's lines, for word-by-word highlighting. A line whose words were all timed into
+  // its neighbour gets none and falls back to its plain text.
+  const segWords = segments.map((s) =>
+    s.start < clip.end && s.end > clip.start ? words.filter((w) => w.start >= s.start - 0.05 && w.start < s.end) : null
+  );
 
   useEffect(() => {
     // Put the clip's first line at the top of the inspector, so the clip fills the view. Opening the
@@ -570,11 +575,9 @@ export function TranscriptPanel({
                 >
                   {timecode(s.start)}
                 </button>
-                {inClip ? (
+                {inClip && segWords[i]?.length ? (
                   <span>
-                    {words
-                      .filter((w) => w.start >= s.start - 0.05 && w.start < s.end)
-                      .map((w, j) => {
+                    {segWords[i].map((w, j) => {
                         const outside = w.end <= clip.start || w.start >= clip.end;
                         const active = time >= w.start && time < w.end + 0.05;
                         return (

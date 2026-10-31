@@ -588,7 +588,13 @@ export function Studio({ id }: { id: string }) {
               ))}
             </div>
           </div>
-          <div data-scroll className="scroll-thin min-h-0 flex-1 p-4 xl:overflow-y-auto xl:overscroll-contain">
+          <div
+            data-scroll
+            className={`scroll-thin min-h-0 flex-1 p-4 xl:overflow-y-auto xl:overscroll-contain ${
+              // Below xl the page scrolls, so the transcript gets its own window to jump to the clip in.
+              tab === "transcript" ? "max-xl:max-h-[70dvh] max-xl:overflow-y-auto" : ""
+            }`}
+          >
             {clip ? (
               tab === "captions" ? (
                 <CaptionPanel
