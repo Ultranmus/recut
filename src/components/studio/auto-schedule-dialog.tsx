@@ -173,7 +173,7 @@ export function AutoScheduleDialog({
 
               <fieldset className="flex items-center justify-between gap-3">
                 <legend className="sr-only">Posts per day</legend>
-                <span className="label">Posts per day, at most</span>
+                <span className="label">Posts per day</span>
                 <div className="segmented">
                   {[1, 2, 3].map((n) => (
                     <button key={n} data-active={perDay === n} onClick={() => setPerDay(n)} className="w-10">
@@ -183,8 +183,8 @@ export function AutoScheduleDialog({
                 </div>
               </fieldset>
               <p className="text-[11px] leading-relaxed text-fg-3">
-                Plans the next two weeks from tomorrow: strongest clips first, times that suit each platform, and no clashes with posts
-                already on your calendar{learnings.length ? ", using your past results" : ""}.
+                Starts tomorrow with {perDay} post{perDay === 1 ? "" : "s"} a day: strongest clips first, times that suit each platform, and
+                no clashes with posts already on your calendar{learnings.length ? ", using your past results" : ""}.
               </p>
             </>
           )}

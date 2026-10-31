@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AUTHOR } from "@/lib/site";
 import { maskKey, setGroqKey, useGroqKey } from "@/lib/settings";
 import { useServerKey } from "@/lib/use-server-key";
-import { IconCheck, IconClose, IconEye, IconEyeOff, IconKey, IconLock } from "./icons";
+import { IconCheck, IconClose, IconEye, IconEyeOff, IconKey, IconLock, LinkedInIcon } from "./icons";
 
 const LOCAL_KEYS = ["recut:demo-clips:v2", "recut:brand-memory", "recut:learnings", "recut:calendar"];
 
@@ -208,6 +209,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </div>
 
           <DataControls />
+
+          <p className="flex items-center justify-center gap-1.5 border-t border-hairline pt-4 text-[11px] text-fg-3">
+            Recut is built by
+            <a href={AUTHOR.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-fg-2 hover:text-accent">
+              {AUTHOR.name} <LinkedInIcon size={12} />
+            </a>
+          </p>
         </div>
       </div>
     </dialog>

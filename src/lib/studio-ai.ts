@@ -47,6 +47,8 @@ export type ParsedBrief = {
   corrections: { from: string; to: string }[];
   fillers: string[];
   digressions: string[];
+  /** "Auto-schedule my clips, 2 a day": plan several clips at once with the AI planner. */
+  autoSchedule: { clipIds: string[]; perDay: number } | null;
 };
 
 export type RewriteMode = "brief" | "rules";
@@ -121,13 +123,15 @@ Return JSON:
 "feedback":[{"clipQuery":"how they referred to the clip","clipId":"matching id or empty","platform":"platform id or empty","views":<number or null>,"outcome":"hit|average|flop","metric":"the result in a few words, e.g. '40K views'","lesson":"one generalizable takeaway about what works or doesn't for this creator, based on the clip's topic and hook, max 20 words"}],
 "corrections":[{"from":"what they first said","to":"what they settled on"}],
 "fillers":["distinct filler words or phrases you ignored, max 8"],
-"digressions":["off-topic tangents you set aside, each paraphrased in under 8 words, e.g. 'aside about their cat'"]}
+"digressions":["off-topic tangents you set aside, each paraphrased in under 8 words, e.g. 'aside about their cat'"],
+"autoSchedule":null or {"clipIds":["clip ids to plan, [] means the creator's best clips"],"count":<how many clips, or null>,"perDay":<posts per day they asked for, default 1>}}
 
 How to read the brief:
 - Ignore fillers (um, uh, like, you know, so, basically, I mean, kind of, sort of, okay so) and false starts.
 - Digressions: set aside tangents that aren't instructions (stories, asides, thinking out loud, unrelated chatter). List them in "digressions" and never act on them.
 - Self-corrections: the LAST version wins. Phrases like "no wait", "actually", "scratch that", "sorry", "I mean", "make that", "not X, Y" replace what came before. Record each one in "corrections" and never act on the replaced part.
 - A brand rule must hold for all future content: words like always, never, every time, from now on, our brand, we don't, no <thing>. A one-off request for this post ("make this one funny") is tone, not a rule.
+- Asking you to plan or spread out several clips without naming a day for each ("auto-schedule my clips", "schedule the top 3 for next week", "plan my posts, two a day") is autoSchedule, not schedule. Leave schedule empty for those clips.
 - "Post/schedule X on <day>" is a schedule entry. Resolve weekdays and relative days ("Tuesday", "tomorrow", "next Friday") to a day number from the calendar list; a bare weekday means its next occurrence (today counts if it is that day).
 - "It got N views", "it did great", "it flopped", "nobody watched" is feedback. Spoken numbers become digits ("forty thousand" = 40000). outcome: hit for strong results or praise, flop for poor results, average otherwise. If no clip is named, use the clip the brief is about, else leave clipId empty.
 - Match clips by meaning, not exact words; clipId must be an id from the clip list (like "clip-3"). Leave it empty if nothing fits.
@@ -190,7 +194,19 @@ How to read the brief:
     corrections,
     fillers: asStrings(r.fillers, 8),
     digressions: asStrings(r.digressions, 5),
+    autoSchedule: parseAutoSchedule(r.autoSchedule, clips, ids),
   };
+}
+
+function parseAutoSchedule(v: unknown, clips: ClipRef[], ids: Set<string>): ParsedBrief["autoSchedule"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const named = asStrings(o.clipIds, 12).filter((id) => ids.has(id));
+  const count = Number(o.count);
+  const best = [...clips].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const clipIds = named.length ? named : best.slice(0, Number.isInteger(count) && count > 0 ? count : 5).map((c) => c.id);
+  const perDay = Math.max(1, Math.min(3, Math.round(Number(o.perDay)) || 1));
+  return clipIds.length ? { clipIds, perDay } : null;
 }
 
 const STOPWORDS = new Set(["the", "a", "an", "one", "clip", "bit", "part", "about", "on", "of", "and", "we", "that", "this", "it", "post", "posted", "video", "short", "s", "vs", "versus", "to", "in"]);
@@ -386,7 +402,8 @@ Already scheduled (avoid these slots):
 ${taken.length ? taken.map((t) => `${t.date} ${t.time || "any time"}: ${t.title}`).join("\n") : "(nothing)"}
 ${learnings.length ? `\nHow past clips performed:\n${learningsPrompt(learnings)}\n` : ""}
 Rules:
-- Schedule every clip exactly once, at most ${perDay} post${perDay === 1 ? "" : "s"} per day; spread them out rather than bunching.
+- Schedule every clip exactly once, ${perDay} post${perDay === 1 ? "" : "s"} per day on consecutive days starting at day 0, until every clip is placed (only the last day may have fewer). Skip a day only if its slots are already taken.
+- When a day has more than one post, give them clearly different times (e.g. morning and evening).
 - Put the strongest clips (higher score, or most like past hits) earlier and on the best days.
 - Choose platforms per clip from: reels, linkedin, x, shorts. Professional, insight-led clips suit linkedin; punchy or visual ones suit reels and shorts; one-line takes suit x. Use 2-4 platforms each.
 - Pick a time (24h HH:MM) that suits those platforms, e.g. LinkedIn weekday mornings 08:00-10:00, X around 09:00-12:00, Reels and Shorts evenings 18:00-21:00. Don't use a slot already taken.
@@ -407,5 +424,27 @@ Return JSON: {"plan":[{"clipId":"...","day":<index>,"time":"HH:MM","platforms":[
     seen.add(clipId);
     out.push({ clipId, date: days[day], time, platforms: platforms.length ? platforms : [...PLATFORM_IDS], reason: asString(item.reason) });
   }
-  return out.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  return packDays(out.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)), days, perDay);
+}
+
+/**
+ * Holds the plan to the chosen posts-per-day even when the model spreads clips out: keeps its order,
+ * times and platforms, but fills days in sequence, and moves a clash on the same day 3 hours later.
+ */
+function packDays(plan: PlanItem[], days: string[], perDay: number): PlanItem[] {
+  const minutes = (t: string) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : -1);
+  const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return plan.map((item, i) => {
+    const date = days[Math.min(days.length - 1, Math.floor(i / perDay))];
+    const sameDay = plan.slice(i - (i % perDay), i);
+    let time = item.time;
+    while (time && sameDay.some((o) => Math.abs(minutes(o.time) - minutes(time)) < 120)) {
+      const next = minutes(time) + 180;
+      time = next < 22 * 60 ? hhmm(next) : hhmm(minutes(time) - 360 > 7 * 60 ? minutes(time) - 360 : 8 * 60);
+      if (sameDay.some((o) => o.time === time)) break;
+    }
+    const placed = { ...item, date, time };
+    plan[i] = placed;
+    return placed;
+  });
 }

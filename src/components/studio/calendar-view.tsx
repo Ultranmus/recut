@@ -57,46 +57,52 @@ export function CalendarView({
 
   return (
     <section className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Content calendar">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-4 py-3">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-tight">This week&apos;s posts</h2>
-          <p className="text-xs text-fg-3">
-            Add a post, drag one to another day, or tell the studio chat &ldquo;post the Gateway clip on Tuesday&rdquo;.
-          </p>
+      <header className="space-y-3 border-b border-hairline px-4 py-3">
+        {/* Row 1: what this is, and which week */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold tracking-tight">This week&apos;s posts</h2>
+            <p className="text-xs text-fg-3">Drag a post to move it, or tell the studio chat &ldquo;post the Gateway clip on Tuesday&rdquo;.</p>
+          </div>
+          <div className="flex items-center gap-1.5 max-sm:w-full">
+            <button className="btn btn-secondary h-8 w-8 shrink-0 p-0" onClick={() => onWeekChange(addDays(weekStart, -7))} aria-label="Previous week">
+              <IconChevronLeft size={15} />
+            </button>
+            <span className="min-w-[9.5rem] flex-1 whitespace-nowrap text-center text-sm font-medium tabular-nums">{range}</span>
+            <button className="btn btn-secondary h-8 w-8 shrink-0 p-0" onClick={() => onWeekChange(addDays(weekStart, 7))} aria-label="Next week">
+              <IconChevronLeft size={15} className="rotate-180" />
+            </button>
+            <button className="btn btn-secondary h-8 shrink-0 px-3 text-xs" onClick={() => onWeekChange(startOfWeek(new Date()))}>
+              Today
+            </button>
+          </div>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          {gcal.enabled ? <GoogleSync gcal={gcal} /> : null}
-          <button className="btn btn-primary h-8 gap-1.5 px-3 text-xs max-sm:flex-1" onClick={onAutoSchedule} disabled={!clips.length}>
-            <IconSparkle size={13} /> Auto-schedule
-          </button>
-          <button className="btn btn-secondary h-8 px-3 text-xs max-sm:flex-1" onClick={() => setAdding(isoDate(new Date()))} disabled={!clips.length}>
-            + Add post
-          </button>
-          <button
-            className="btn btn-secondary order-last h-8 px-3 text-xs max-sm:w-full sm:order-none"
-            disabled={!inWeek.length}
-            title="Imports into Google Calendar, Apple Calendar or Outlook, with a reminder 30 minutes before each timed post"
-            onClick={() =>
-              download(
-                new Blob([toIcs(inWeek, (e) => (e.projectId === project.id ? clips.find((c) => c.id === e.clipId) : undefined))], {
-                  type: "text/calendar",
-                }),
-                `recut-week-${isoDate(weekStart)}.ics`
-              )
-            }
-          >
-            Export week (.ics)
-          </button>
-          <button className="btn btn-secondary h-8 w-8 p-0" onClick={() => onWeekChange(addDays(weekStart, -7))} aria-label="Previous week">
-            <IconChevronLeft size={15} />
-          </button>
-          <span className="flex-1 text-center text-sm font-medium tabular-nums sm:mx-1 sm:flex-none">{range}</span>
-          <button className="btn btn-secondary h-8 w-8 p-0" onClick={() => onWeekChange(addDays(weekStart, 7))} aria-label="Next week">
-            <IconChevronLeft size={15} className="rotate-180" />
-          </button>
-          <button className="btn btn-secondary h-8 px-3 text-xs" onClick={() => onWeekChange(startOfWeek(new Date()))}>
-            Today
-          </button>
+        {/* Row 2: sync status on the left, actions on the right */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center max-sm:w-full">{gcal.enabled ? <GoogleSync gcal={gcal} /> : null}</div>
+          <div className="grid grid-cols-3 gap-2 max-sm:w-full sm:flex sm:items-center">
+            <button
+              className="btn btn-secondary h-8 px-3 text-xs"
+              disabled={!inWeek.length}
+              title="Imports into Google Calendar, Apple Calendar or Outlook, with a reminder 30 minutes before each timed post"
+              onClick={() =>
+                download(
+                  new Blob([toIcs(inWeek, (e) => (e.projectId === project.id ? clips.find((c) => c.id === e.clipId) : undefined))], {
+                    type: "text/calendar",
+                  }),
+                  `recut-week-${isoDate(weekStart)}.ics`
+                )
+              }
+            >
+              Export .ics
+            </button>
+            <button className="btn btn-secondary h-8 px-3 text-xs" onClick={() => setAdding(isoDate(new Date()))} disabled={!clips.length}>
+              + Add post
+            </button>
+            <button className="btn btn-primary h-8 gap-1.5 px-3 text-xs" onClick={onAutoSchedule} disabled={!clips.length}>
+              <IconSparkle size={13} /> Auto-schedule
+            </button>
+          </div>
         </div>
       </header>
 
@@ -439,11 +445,11 @@ function GoogleSync({ gcal }: { gcal: ReturnType<typeof useGoogleCalendarSync> }
   const { status, error, connect, disconnect, lastSync } = gcal;
   if (status === "off") {
     return (
-      <span className="flex flex-col items-end gap-0.5 max-sm:w-full">
-        <button className="btn btn-secondary h-8 gap-2 px-3 text-xs max-sm:w-full" onClick={connect}>
+      <span className="flex flex-wrap items-center gap-2 max-sm:w-full">
+        <button className="btn btn-secondary h-8 gap-2 px-3 text-xs max-sm:flex-1" onClick={connect}>
           <GoogleLogo /> Connect Google Calendar
         </button>
-        {error ? <span className="text-[10px] text-danger">{error}</span> : null}
+        {error ? <span className="text-[11px] text-danger">{error}</span> : <span className="text-[11px] text-fg-3 max-sm:hidden">Keep posts in sync automatically</span>}
       </span>
     );
   }
@@ -458,7 +464,7 @@ function GoogleSync({ gcal }: { gcal: ReturnType<typeof useGoogleCalendarSync> }
   return (
     <span className="flex items-center gap-1 max-sm:w-full">
       <button
-        className={`btn h-8 gap-2 px-3 text-xs max-sm:flex-1 ${status === "synced" || status === "syncing" ? "btn-secondary" : "border border-warning/40 bg-warning/10 text-warning"}`}
+        className={`btn h-8 gap-2 px-3 text-xs max-sm:flex-1 max-sm:justify-start ${status === "synced" || status === "syncing" ? "btn-secondary" : "border border-warning/40 bg-warning/10 text-warning"}`}
         onClick={status === "expired" || status === "error" ? connect : undefined}
         title={error ?? "Every post on this calendar is kept in your Google Calendar"}
       >

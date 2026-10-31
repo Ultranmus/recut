@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Features, HomeOptions, RecentProjects } from "@/components/home-options";
+import { LinkedInIcon } from "@/components/icons";
 import { TopBar } from "@/components/top-bar";
+import { AUTHOR } from "@/lib/site";
 
 export default function Home() {
   return (
@@ -42,6 +44,13 @@ export default function Home() {
           {" · "}
           <a href="https://github.com/Ultranmus/recut" className="hover:text-accent">
             GitHub
+          </a>
+        </span>
+        <span className="mt-2 block">
+          Built by{" "}
+          <a href={AUTHOR.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-fg-2 hover:text-accent">
+            {AUTHOR.name}
+            <LinkedInIcon />
           </a>
         </span>
       </footer>

@@ -462,6 +462,14 @@ function Reply({
             </span>
           </Row>
         ) : null}
+        {brief.autoSchedule ? (
+          <Row label="Auto-plan">
+            <span className="text-[12px]">
+              {brief.autoSchedule.clipIds.length} clip{brief.autoSchedule.clipIds.length === 1 ? "" : "s"}, {brief.autoSchedule.perDay} a day, from
+              tomorrow
+            </span>
+          </Row>
+        ) : null}
         {brief.feedback.length ? (
           <Row label="Results">
             <span className="block space-y-1 text-[12px]">

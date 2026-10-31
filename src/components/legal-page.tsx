@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AUTHOR } from "@/lib/site";
+import { LinkedInIcon } from "./icons";
 import { TopBar } from "./top-bar";
 
 /** Shared layout for the Privacy Policy and Terms: a readable single column in the app's style. */
@@ -23,6 +25,12 @@ export function LegalPage({ title, updated, children }: { title: string; updated
           <Link href="/" className="hover:text-accent">
             Back to Recut
           </Link>
+          <span className="mt-2 block">
+            Built by{" "}
+            <a href={AUTHOR.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-fg-2 hover:text-accent">
+              {AUTHOR.name} <LinkedInIcon />
+            </a>
+          </span>
         </p>
       </main>
     </>

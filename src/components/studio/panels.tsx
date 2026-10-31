@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { duration, timecode } from "@/lib/format";
 import { diffWords, groupDiff, keptShare } from "@/lib/diff";
 import { PLATFORMS, type Clip, type PlatformId, type Segment, type Word } from "@/lib/types";
-import { IconCheck, IconCopy, IconEye, IconScissors, IconSparkle } from "../icons";
+import { IconCheck, IconChevronLeft, IconCopy, IconEye, IconScissors, IconSparkle } from "../icons";
 import { PostPreviewDialog } from "./post-preview-dialog";
 
 export function ScoreRing({ score, size = 34 }: { score: number; size?: number }) {
@@ -383,41 +383,116 @@ export function CaptionPanel({
   );
 }
 
-/** Start/end, editable hook line and the AI's reason for picking this moment. */
+const CalendarIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+    <path d="M3.5 10h17M8 3v4M16 3v4M12 13.5v4M10 15.5h4" />
+  </svg>
+);
+
+const DETAILS_KEY = "recut:details-collapsed";
+
+/**
+ * Start/end, editable hook line and the AI's reason for picking this moment. Collapses to one slim
+ * line so the preview gets the room; the choice is remembered.
+ */
 export function ClipDetails({
   clip,
   rank,
   scheduled,
   onChange,
   onSchedule,
+  onAutoSchedule,
 }: {
   clip: Clip;
   rank: number;
   scheduled?: string;
   onChange: (c: Clip) => void;
   onSchedule: () => void;
+  onAutoSchedule: () => void;
 }) {
+  // The studio renders only in the browser (projects load from IndexedDB), so reading storage here is safe.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(DETAILS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function toggle() {
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(DETAILS_KEY, c ? "0" : "1");
+      } catch {}
+      return !c;
+    });
+  }
+
+  const ring = clip.score ? (
+    <ScoreRing score={clip.score} size={collapsed ? 32 : 40} />
+  ) : (
+    <span className={`grid shrink-0 place-items-center rounded-full border border-dashed border-white/20 text-fg-3 ${collapsed ? "size-8" : "size-10"}`}>
+      <IconScissors size={14} />
+    </span>
+  );
+  const times = (
+    <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-white/6 px-2 py-0.5 font-mono text-[11px] tabular-nums text-fg-2">
+      {timecode(clip.start)} <span className="text-fg-3">→</span> {timecode(clip.end)}
+      <span className="text-fg-3">· {duration(clip.end - clip.start)}</span>
+    </span>
+  );
+  const actions = (
+    <>
+      <button className="btn btn-secondary h-8 gap-1.5 px-3 text-xs" onClick={onSchedule}>
+        <CalendarIcon /> Schedule post
+      </button>
+      <button className="btn btn-secondary h-8 gap-1.5 px-3 text-xs text-accent" onClick={onAutoSchedule} title="Let AI plan when and where to post your clips">
+        <IconSparkle size={13} /> Auto-schedule
+      </button>
+    </>
+  );
+  const chevron = (
+    <button
+      className="btn btn-ghost h-7 w-7 shrink-0 p-0"
+      onClick={toggle}
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? "Show clip details" : "Hide clip details"}
+      title={collapsed ? "Show details" : "Hide details to focus on the preview"}
+    >
+      <IconChevronLeft size={15} className={`transition-transform ${collapsed ? "-rotate-90" : "rotate-90"}`} />
+    </button>
+  );
+
+  if (collapsed) {
+    return (
+      <div className="mx-auto flex w-full max-w-[560px] flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-hairline bg-white/[0.03] px-3 py-2.5">
+        {ring}
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+          {rank > 0 ? <span className="mr-1.5 text-fg-3">#{rank}</span> : null}
+          {clip.title}
+        </h2>
+        {times}
+        {chevron}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[560px] rounded-2xl border border-hairline bg-white/[0.03] p-4">
       <div className="flex items-start gap-3">
-        {clip.score ? (
-          <ScoreRing score={clip.score} size={40} />
-        ) : (
-          <span className="grid size-10 shrink-0 place-items-center rounded-full border border-dashed border-white/20 text-fg-3">
-            <IconScissors size={15} />
-          </span>
-        )}
+        {ring}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <h2 className="truncate text-base font-semibold tracking-tight">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="min-w-0 truncate pt-0.5 text-base font-semibold tracking-tight">
               {rank > 0 ? <span className="mr-1.5 text-fg-3">#{rank}</span> : null}
               {clip.title}
             </h2>
-            <span className="flex items-center gap-1.5 rounded-md bg-white/6 px-2 py-0.5 font-mono text-[11px] tabular-nums text-fg-2">
-              {timecode(clip.start)} <span className="text-fg-3">→</span> {timecode(clip.end)}
-              <span className="text-fg-3">· {duration(clip.end - clip.start)}</span>
+            <span className="flex shrink-0 items-center gap-1">
+              <span className="max-sm:hidden">{times}</span>
+              {chevron}
             </span>
           </div>
+          <span className="mt-1 inline-flex sm:hidden">{times}</span>
           <label className="mt-3 block">
             <span className="label">Hook</span>
             {/* Grows with the text, so a long hook wraps instead of being cut off. */}
@@ -445,13 +520,7 @@ export function ClipDetails({
             </div>
           ) : null}
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
-            <button className="btn btn-secondary h-8 gap-1.5 px-3 text-xs" onClick={onSchedule}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
-                <path d="M3.5 10h17M8 3v4M16 3v4M12 13.5v4M10 15.5h4" />
-              </svg>
-              Schedule post
-            </button>
+            {actions}
             {scheduled ? <span className="text-[11px] text-fg-3">On the calendar: {scheduled}</span> : null}
           </div>
         </div>

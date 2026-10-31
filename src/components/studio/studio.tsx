@@ -4,12 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLearnings, addRules, getLearnings, getRules, useBrandRules, useLearnings } from "@/lib/brand-memory";
-import { addDays, isoDate, parseIso, schedule, startOfWeek, useCalendar } from "@/lib/calendar";
+import { addDays, getCalendar, isoDate, parseIso, schedule, startOfWeek, useCalendar } from "@/lib/calendar";
 import { enforceRules, type BrandRule } from "@/lib/brand-rules";
 import { paginate, wordsInRange } from "@/lib/captions";
 import { duration } from "@/lib/format";
 import { DEMO_ID, getProject, saveProject } from "@/lib/projects";
-import { briefAI, learnAI, rerankAI, rewriteAI } from "@/lib/studio-client";
+import { briefAI, learnAI, planAI, rerankAI, rewriteAI } from "@/lib/studio-client";
 import type { ParsedBrief, RewriteMode, RewriteResult } from "@/lib/studio-ai";
 import { PLATFORMS, type Clip, type PlatformId, type Project, type Segment } from "@/lib/types";
 import { IconChevronLeft, IconFilm, IconScissors, IconSparkle, IconWave } from "../icons";
@@ -222,7 +222,7 @@ export function Studio({ id }: { id: string }) {
     try {
       const b = await briefAI(
         raw,
-        clips.map(({ id, title, hook, start, end }) => ({ id, title, hook, start, end })),
+        clips.map(({ id, title, hook, start, end, score }) => ({ id, title, hook, start, end, score })),
         getRules()
       );
       setBrief(b);
@@ -259,6 +259,40 @@ export function Studio({ id }: { id: string }) {
         setWeekStart(startOfWeek(parseIso(entries[0].date)));
         setView("calendar");
         done.push(`${entries.length} post${entries.length === 1 ? "" : "s"} added to the calendar`);
+      }
+
+      // "Auto-schedule my clips, 2 a day": the same AI planner as the Auto-schedule button.
+      if (b.autoSchedule) {
+        const chosen = b.autoSchedule.clipIds.map((id) => byId.get(id)).filter((c): c is Clip => Boolean(c));
+        const perDay = b.autoSchedule.perDay;
+        setBriefStep(`Planning ${chosen.length} post${chosen.length === 1 ? "" : "s"}, ${perDay} a day…`);
+        const days = Array.from({ length: 14 }, (_, i) => isoDate(addDays(new Date(), i + 1)));
+        const taken = getCalendar()
+          .filter((e) => e.date >= days[0])
+          .map((e) => ({ date: e.date, time: e.time, title: e.clipTitle }));
+        const plan = await planAI(
+          chosen.map(({ id, title, hook, start, end, score }) => ({ id, title, hook, start, end, score })),
+          days,
+          taken,
+          getLearnings(),
+          perDay
+        );
+        const planned = schedule(
+          plan
+            .filter((p) => byId.has(p.clipId))
+            .map((p) => {
+              const c = byId.get(p.clipId)!;
+              return { projectId: project.id, projectName: project.name, clipId: c.id, clipTitle: c.title, hook: c.hook, platforms: p.platforms, date: p.date, time: p.time, source: "voice" as const };
+            })
+        );
+        if (planned.length) {
+          entries.push(...planned);
+          setHighlight(entries.map((e) => e.id));
+          setTimeout(() => setHighlight([]), 6000);
+          setWeekStart(startOfWeek(parseIso(planned[0].date)));
+          setView("calendar");
+          done.push(`${planned.length} post${planned.length === 1 ? "" : "s"} auto-scheduled on the calendar, ${perDay} a day`);
+        }
       }
 
       // Performance feedback becomes learnings, which immediately re-rank this episode.
@@ -560,6 +594,7 @@ export function Studio({ id }: { id: string }) {
                 scheduled={scheduledLabel(clip.id)}
                 onChange={updateClip}
                 onSchedule={() => setScheduling(clip.id)}
+                onAutoSchedule={() => setAutoScheduling(true)}
               />
               <ClipPreview
                 project={project}

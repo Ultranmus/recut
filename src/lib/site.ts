@@ -8,3 +8,5 @@ export const SITE_URL = (
 export const SITE_NAME = "Recut";
 export const SITE_DESCRIPTION =
   "Upload a podcast or video. Recut finds the moments worth sharing and writes captions for Instagram Reels, LinkedIn, X and YouTube Shorts, in your brand voice.";
+
+export const AUTHOR = { name: "Himanshu Mathpal", linkedin: "https://www.linkedin.com/in/mathpalhimanshu33/" };
