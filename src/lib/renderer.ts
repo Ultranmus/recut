@@ -16,6 +16,18 @@ export const CAPTION_STYLES: { id: CaptionStyle; name: string }[] = [
   { id: "minimal", name: "Minimal" },
 ];
 
+export type CaptionOptions = {
+  size: "s" | "m" | "l";
+  position: "top" | "middle" | "bottom";
+  caps: boolean;
+  /** A translucent box behind each caption line, for busy backgrounds. */
+  background: boolean;
+};
+
+export const DEFAULT_CAPTION_OPTIONS: CaptionOptions = { size: "m", position: "bottom", caps: false, background: false };
+
+const SIZE_SCALE = { s: 0.78, m: 1, l: 1.25 } as const;
+
 export type FrameInput = {
   time: number;
   start: number;
@@ -23,6 +35,7 @@ export type FrameInput = {
   hook: string;
   pages: CaptionPage[];
   style: CaptionStyle;
+  options: CaptionOptions;
   accent: string;
   background: HTMLCanvasElement;
   cover: HTMLImageElement | null;
@@ -179,17 +192,17 @@ function drawWave(ctx: CanvasRenderingContext2D, levels: Float32Array, cy: numbe
 }
 
 function drawCaptions(ctx: CanvasRenderingContext2D, input: FrameInput, cy: number) {
-  const { time, pages, style, accent } = input;
+  const { time, pages, style, accent, options } = input;
   const page = pages.find((p) => time >= p.start - 0.05 && time <= p.end + 0.15);
   if (!page) return;
 
-  const size = style === "minimal" ? 62 : 82;
+  const size = Math.round((style === "minimal" ? 62 : 82) * SIZE_SCALE[options.size]);
   const weight = style === "minimal" ? 650 : 850;
   ctx.font = font(weight, size);
   const space = ctx.measureText(" ").width * (style === "pop" ? 1.4 : 1);
   const tokens = page.words.map((w) => ({
     w,
-    text: style === "pop" ? w.word.toUpperCase() : w.word,
+    text: style === "pop" || options.caps ? w.word.toUpperCase() : w.word,
   }));
   // Lay out words into centered lines.
   const maxWidth = 900;
@@ -210,6 +223,11 @@ function drawCaptions(ctx: CanvasRenderingContext2D, input: FrameInput, cy: numb
 
   for (const line of lines) {
     let x = (W - line.width) / 2;
+    if (options.background) {
+      roundRect(ctx, x - 26, y - size * 0.7, line.width + 52, size * 1.4, 22);
+      ctx.fillStyle = "rgba(0,0,0,0.62)";
+      ctx.fill();
+    }
     for (const t of line.items) {
       const tw = ctx.measureText(t.text).width;
       const active = time >= t.w.start - 0.03 && time < t.w.end + 0.05;
@@ -266,6 +284,11 @@ function drawProgress(ctx: CanvasRenderingContext2D, input: FrameInput) {
   ctx.fill();
 }
 
+/** Where captions sit: below the hook, the middle of the frame, or the usual lower third. */
+function captionY(options: CaptionOptions, bottom: number) {
+  return options.position === "top" ? 430 : options.position === "middle" ? H / 2 : bottom;
+}
+
 export function drawFrame(ctx: CanvasRenderingContext2D, input: FrameInput) {
   const v = input.video;
   if (v && v.videoWidth) {
@@ -284,7 +307,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, input: FrameInput) {
     ctx.fillStyle = bottom;
     ctx.fillRect(0, H * 0.55, W, H * 0.45);
     drawHook(ctx, input.hook, 170);
-    drawCaptions(ctx, input, 1460);
+    drawCaptions(ctx, input, captionY(input.options, 1460));
   } else {
     ctx.drawImage(input.background, 0, 0);
     drawHook(ctx, input.hook, 170);
@@ -298,7 +321,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, input: FrameInput) {
     ctx.font = font(500, 32);
     ctx.fillText(wrap(ctx, input.subtitle, 900, 1)[0] ?? "", W / 2, 1160);
     drawWave(ctx, input.levels, 1290, input.accent);
-    drawCaptions(ctx, input, 1540);
+    drawCaptions(ctx, input, captionY(input.options, 1540));
   }
   drawProgress(ctx, input);
 }

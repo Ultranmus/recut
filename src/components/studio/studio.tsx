@@ -12,12 +12,14 @@ import { DEMO_ID, getProject, saveProject } from "@/lib/projects";
 import { briefAI, learnAI, rerankAI, rewriteAI } from "@/lib/studio-client";
 import type { ParsedBrief, RewriteMode, RewriteResult } from "@/lib/studio-ai";
 import { PLATFORMS, type Clip, type PlatformId, type Project, type Segment } from "@/lib/types";
-import { IconChevronLeft, IconFilm, IconScissors, IconWave } from "../icons";
+import { IconChevronLeft, IconFilm, IconScissors, IconSparkle, IconWave } from "../icons";
 import { TopBar } from "../top-bar";
 import { ClipPreview, type PlayerHandle } from "./clip-preview";
 import { BrandMemoryPanel } from "./brand-memory-panel";
 import { CalendarView, outcomeBadge } from "./calendar-view";
 import { CaptionPanel, ClipDetails, ClipList, EpisodeTimeline, TranscriptPanel, type ClipBadges, type PendingChange } from "./panels";
+import { useGoogleCalendarSync } from "@/lib/google-calendar";
+import { AutoScheduleDialog } from "./auto-schedule-dialog";
 import { ScheduleDialog } from "./schedule-dialog";
 import { sendBrief, TalkToStudio, type BriefState } from "./talk-box";
 
@@ -51,6 +53,7 @@ export function Studio({ id }: { id: string }) {
   const [briefError, setBriefError] = useState<string | null>(null);
   const [briefClipId, setBriefClipId] = useState<string | null>(null);
   const [scheduling, setScheduling] = useState<string | null>(null);
+  const [autoScheduling, setAutoScheduling] = useState(false);
   // What the brief is doing right now, shown live in the chat ("Adding 2 posts to the calendar…").
   const [briefStep, setBriefStep] = useState("");
   /** Suggested caption changes awaiting review, keyed by clip id then platform. */
@@ -129,6 +132,8 @@ export function Studio({ id }: { id: string }) {
       (badges[e.clipId] ??= {}).scheduled ??= `📅 ${day}`;
     }
   }
+
+  const gcal = useGoogleCalendarSync(calendar, (e) => (project && e.projectId === project.id ? clips.find((c) => c.id === e.clipId) : undefined));
 
   const scheduledLabel = (clipId: string) => badges[clipId]?.scheduled?.replace("📅 ", "");
 
@@ -492,6 +497,8 @@ export function Studio({ id }: { id: string }) {
             setView("studio");
           }}
           onFeedback={(_, sentence) => sendBrief(sentence)}
+          onAutoSchedule={() => setAutoScheduling(true)}
+          gcal={gcal}
         />
       ) : (
       <main className="grid flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:min-h-0 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
@@ -526,8 +533,14 @@ export function Studio({ id }: { id: string }) {
             ) : null}
           </div>
           <div className="flex items-center justify-between px-4 pb-1 pt-3">
-            <h2 className="label">Clips</h2>
-            <span className="text-[11px] text-fg-3">{clips.length} moments · ranked</span>
+            <h2 className="label">Clips · {clips.length}</h2>
+            <button
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/10"
+              onClick={() => setAutoScheduling(true)}
+              title="Let AI plan when and where to post these clips"
+            >
+              <IconSparkle size={12} /> Auto-schedule
+            </button>
           </div>
           <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-16 max-lg:max-h-96 lg:max-xl:max-h-[46rem]">
             <ClipList clips={clips} selectedId={clip?.id ?? ""} onSelect={setSelectedId} badges={badges} />
@@ -612,6 +625,7 @@ export function Studio({ id }: { id: string }) {
                 <CaptionPanel
                   key={clip.id}
                   clip={clip}
+                  media={{ cover: project.cover, show: project.source?.show }}
                   onChange={updateClip}
                   pending={pending[clip.id] ?? {}}
                   learning={learning}
@@ -676,6 +690,34 @@ export function Studio({ id }: { id: string }) {
           setBriefState("idle");
         }}
       />
+
+      {autoScheduling && project ? (
+        <AutoScheduleDialog
+          clips={clips}
+          entries={calendar}
+          learnings={learnings}
+          projectId={project.id}
+          onClose={() => setAutoScheduling(false)}
+          onAdd={(plan) => {
+            const byId = new Map(clips.map((c) => [c.id, c]));
+            const added = schedule(
+              plan
+                .filter((p) => byId.has(p.clipId))
+                .map((p) => {
+                  const c = byId.get(p.clipId)!;
+                  return { projectId: project.id, projectName: project.name, clipId: c.id, clipTitle: c.title, hook: c.hook, platforms: p.platforms, date: p.date, time: p.time, source: "voice" as const };
+                })
+            );
+            setAutoScheduling(false);
+            if (!added.length) return;
+            setHighlight(added.map((e) => e.id));
+            setTimeout(() => setHighlight([]), 6000);
+            setWeekStart(startOfWeek(parseIso(added[0].date)));
+            setView("calendar");
+            setToast(`Scheduled ${added.length} post${added.length === 1 ? "" : "s"} with AI.`);
+          }}
+        />
+      ) : null}
 
       {scheduling && project ? (
         <ScheduleDialog

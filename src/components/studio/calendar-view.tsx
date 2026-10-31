@@ -6,7 +6,8 @@ import { addDays, isoDate, moveEntry, parseIso, schedule, startOfWeek, unschedul
 import { googleCalendarUrl, toIcs } from "@/lib/calendar-export";
 import { download } from "@/lib/format";
 import { PLATFORMS, type Clip, type Project } from "@/lib/types";
-import { IconChevronLeft, IconClose } from "../icons";
+import { IconChevronLeft, IconClose, IconSparkle } from "../icons";
+import type { useGoogleCalendarSync } from "@/lib/google-calendar";
 import { formatTime, ScheduleDialog } from "./schedule-dialog";
 
 export function outcomeBadge(l: Learning) {
@@ -26,6 +27,8 @@ export function CalendarView({
   onWeekChange,
   onOpenClip,
   onFeedback,
+  onAutoSchedule,
+  gcal,
   busy,
 }: {
   project: Project;
@@ -37,6 +40,8 @@ export function CalendarView({
   onWeekChange: (d: Date) => void;
   onOpenClip: (clipId: string) => void;
   onFeedback: (entry: CalendarEntry, sentence: string) => void;
+  onAutoSchedule: () => void;
+  gcal: ReturnType<typeof useGoogleCalendarSync>;
   busy: boolean;
 }) {
   const [adding, setAdding] = useState<string | null>(null);
@@ -60,8 +65,12 @@ export function CalendarView({
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <button className="btn btn-primary h-8 px-3 text-xs max-sm:w-full" onClick={() => setAdding(isoDate(new Date()))} disabled={!clips.length}>
-            + Schedule a post
+          {gcal.enabled ? <GoogleSync gcal={gcal} /> : null}
+          <button className="btn btn-primary h-8 gap-1.5 px-3 text-xs max-sm:flex-1" onClick={onAutoSchedule} disabled={!clips.length}>
+            <IconSparkle size={13} /> Auto-schedule
+          </button>
+          <button className="btn btn-secondary h-8 px-3 text-xs max-sm:flex-1" onClick={() => setAdding(isoDate(new Date()))} disabled={!clips.length}>
+            + Add post
           </button>
           <button
             className="btn btn-secondary order-last h-8 px-3 text-xs max-sm:w-full sm:order-none"
@@ -411,5 +420,55 @@ function FeedbackDialog({
         </div>
       </div>
     </dialog>
+  );
+}
+
+function GoogleLogo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden>
+      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z" />
+      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z" />
+      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8l4-3.1z" />
+      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z" />
+    </svg>
+  );
+}
+
+/** Connect / status control for syncing the calendar into Google Calendar. */
+function GoogleSync({ gcal }: { gcal: ReturnType<typeof useGoogleCalendarSync> }) {
+  const { status, error, connect, disconnect, lastSync } = gcal;
+  if (status === "off") {
+    return (
+      <span className="flex flex-col items-end gap-0.5 max-sm:w-full">
+        <button className="btn btn-secondary h-8 gap-2 px-3 text-xs max-sm:w-full" onClick={connect}>
+          <GoogleLogo /> Connect Google Calendar
+        </button>
+        {error ? <span className="text-[10px] text-danger">{error}</span> : null}
+      </span>
+    );
+  }
+  const label =
+    status === "syncing"
+      ? "Syncing…"
+      : status === "expired"
+        ? "Reconnect to sync"
+        : status === "error"
+          ? "Sync failed · retry"
+          : `Synced${lastSync ? ` ${new Date(lastSync).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}`;
+  return (
+    <span className="flex items-center gap-1 max-sm:w-full">
+      <button
+        className={`btn h-8 gap-2 px-3 text-xs max-sm:flex-1 ${status === "synced" || status === "syncing" ? "btn-secondary" : "border border-warning/40 bg-warning/10 text-warning"}`}
+        onClick={status === "expired" || status === "error" ? connect : undefined}
+        title={error ?? "Every post on this calendar is kept in your Google Calendar"}
+      >
+        <GoogleLogo />
+        {status === "syncing" ? <span className="size-3 animate-spin rounded-full border-2 border-fg-3 border-t-transparent" /> : null}
+        {label}
+      </button>
+      <button className="btn btn-ghost h-8 px-2 text-[11px]" onClick={disconnect} title="Stop syncing (events already added stay in Google Calendar)">
+        Disconnect
+      </button>
+    </span>
   );
 }

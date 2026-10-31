@@ -358,3 +358,54 @@ Return JSON: {"clips":[{"id":"...","score":<0-100>,"reason":"which learning move
   }
   return out;
 }
+
+export type PlanItem = { clipId: string; date: string; time: string; platforms: PlatformId[]; reason: string };
+
+/**
+ * Plans a posting schedule for the chosen clips: spreads them across the coming days, best clips
+ * first, at times that suit each platform, steering clear of slots already taken. Dates come back
+ * as indexes into the `days` list, which the code turns into real dates.
+ */
+export async function planSchedule(
+  clips: ClipRef[],
+  days: string[],
+  taken: { date: string; time: string; title: string }[],
+  learnings: Learning[],
+  perDay: number,
+  apiKey: string
+): Promise<PlanItem[]> {
+  if (!clips.length || !days.length) return [];
+  const system = `You are a social media strategist who plans when to post short clips. Respond with JSON only.`;
+  const user = `Plan a posting schedule for these clips (id | score | title | hook):
+${clips.map((c) => `${c.id} | ${c.score ?? 70} | ${c.title} | ${c.hook}`).join("\n")}
+
+Days you can use (index: weekday date):
+${days.map((d, i) => `${i}: ${new Date(`${d}T12:00`).toLocaleDateString("en-US", { weekday: "long" })} ${d}`).join("\n")}
+
+Already scheduled (avoid these slots):
+${taken.length ? taken.map((t) => `${t.date} ${t.time || "any time"}: ${t.title}`).join("\n") : "(nothing)"}
+${learnings.length ? `\nHow past clips performed:\n${learningsPrompt(learnings)}\n` : ""}
+Rules:
+- Schedule every clip exactly once, at most ${perDay} post${perDay === 1 ? "" : "s"} per day; spread them out rather than bunching.
+- Put the strongest clips (higher score, or most like past hits) earlier and on the best days.
+- Choose platforms per clip from: reels, linkedin, x, shorts. Professional, insight-led clips suit linkedin; punchy or visual ones suit reels and shorts; one-line takes suit x. Use 2-4 platforms each.
+- Pick a time (24h HH:MM) that suits those platforms, e.g. LinkedIn weekday mornings 08:00-10:00, X around 09:00-12:00, Reels and Shorts evenings 18:00-21:00. Don't use a slot already taken.
+- reason: why this day, time and platforms, max 16 words. Never invent past results.
+
+Return JSON: {"plan":[{"clipId":"...","day":<index>,"time":"HH:MM","platforms":["..."],"reason":"..."}]}`;
+
+  const r = await groqJSON(chat(system, user, 3500, "medium"), apiKey);
+  const ids = new Set(clips.map((c) => c.id));
+  const seen = new Set<string>();
+  const out: PlanItem[] = [];
+  for (const item of asObjects(r.plan)) {
+    const clipId = asString(item.clipId);
+    const day = Number(item.day);
+    if (!ids.has(clipId) || seen.has(clipId) || !Number.isInteger(day) || !days[day]) continue;
+    const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(asString(item.time)) ? asString(item.time) : "";
+    const platforms = asPlatforms(item.platforms);
+    seen.add(clipId);
+    out.push({ clipId, date: days[day], time, platforms: platforms.length ? platforms : [...PLATFORM_IDS], reason: asString(item.reason) });
+  }
+  return out.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}

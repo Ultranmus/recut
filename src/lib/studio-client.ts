@@ -3,7 +3,7 @@
 import type { BrandRule, Learning } from "./brand-rules";
 import { upcomingDates } from "./calendar";
 import { getGroqKey } from "./settings";
-import { learnRule, parseBrief, rerankClips, rewriteCaptions, type ClipRef, type RewriteInput } from "./studio-ai";
+import { learnRule, parseBrief, planSchedule, rerankClips, rewriteCaptions, type ClipRef, type PlanItem, type RewriteInput } from "./studio-ai";
 import type { PlatformId } from "./types";
 
 /** Turns the browser's bare "Failed to fetch" into something a creator can act on. */
@@ -56,4 +56,15 @@ export function rerankAI(clips: ClipRef[], learnings: Learning[]) {
   return (
     key ? rerankClips(clips, learnings, key) : viaServer<Awaited<ReturnType<typeof rerankClips>>>({ action: "rerank", clips, learnings })
   ).catch(friendly);
+}
+
+export async function planAI(clips: ClipRef[], days: string[], taken: { date: string; time: string; title: string }[], learnings: Learning[], perDay: number) {
+  const key = getGroqKey();
+  try {
+    if (key) return await planSchedule(clips, days, taken, learnings, perDay, key);
+    const r = await viaServer<{ plan: PlanItem[] }>({ action: "plan", clips, days, taken, learnings, perDay });
+    return r.plan;
+  } catch (err) {
+    return friendly(err);
+  }
 }

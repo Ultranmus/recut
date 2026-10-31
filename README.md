@@ -59,6 +59,8 @@ Import the repo on [Vercel](https://vercel.com/new) and add `GROQ_API_KEY` as an
 
 Optionally set `NEXT_PUBLIC_SITE_URL` (e.g. `https://recutapp.vercel.app`) so link previews and the sitemap use your preferred domain; otherwise the project's production domain is used.
 
+**Google Calendar sync (optional).** To turn on "Connect Google Calendar", create an OAuth client in Google Cloud: enable the Google Calendar API, set up the consent screen (add yourself as a test user), then create a *Web application* client whose authorized JavaScript origins include your site URL. Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to its client ID. Sign-in happens in the browser with Google Identity Services, so no client secret is needed and the access token never reaches the server.
+
 Recut is installable as an app (PWA). A small service worker keeps the app shell and pages you've opened available offline; uploads and AI features need a connection.
 
 ## Tech

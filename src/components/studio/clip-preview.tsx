@@ -6,6 +6,7 @@ import { toSrt } from "@/lib/captions";
 import { download, duration, slugify, timecode } from "@/lib/format";
 import {
   CAPTION_STYLES,
+  DEFAULT_CAPTION_OPTIONS,
   H,
   W,
   drawFrame,
@@ -13,6 +14,7 @@ import {
   pickMimeType,
   resolveFontFamily,
   updateLevels,
+  type CaptionOptions,
   type CaptionStyle,
 } from "@/lib/renderer";
 import type { Clip, Project, Word } from "@/lib/types";
@@ -62,6 +64,7 @@ export function ClipPreview({
 
   const [view, setView] = useState<View>("original");
   const [style, setStyle] = useState<CaptionStyle>("pop");
+  const [capOpts, setCapOpts] = useState<CaptionOptions>(DEFAULT_CAPTION_OPTIONS);
   const [accent, setAccent] = useState(ACCENTS[0]);
   const [showHook, setShowHook] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -76,9 +79,9 @@ export function ClipPreview({
   const bars = useMemo(() => speechBars(words, clip.start, clip.end), [words, clip.start, clip.end]);
 
   // Latest values for the render loop, which runs outside React's render cycle.
-  const live = useRef({ clip, pages, style, accent, showHook, onTime, view, bars });
+  const live = useRef({ clip, pages, style, capOpts, accent, showHook, onTime, view, bars });
   useEffect(() => {
-    live.current = { clip, pages, style, accent, showHook, onTime, view, bars };
+    live.current = { clip, pages, style, capOpts, accent, showHook, onTime, view, bars };
   });
 
   useEffect(() => {
@@ -118,6 +121,7 @@ export function ClipPreview({
           hook: L.showHook ? L.clip.hook : "",
           pages: L.pages,
           style: L.style,
+          options: L.capOpts,
           accent: L.accent,
           background: background.current,
           cover: cover.current,
@@ -505,14 +509,78 @@ export function ClipPreview({
 
         {view === "social" ? (
           <>
-            <div className="mt-4 flex justify-center">
-              <div className="segmented" role="radiogroup" aria-label="Caption style">
-                {CAPTION_STYLES.map((s) => (
-                  <button key={s.id} data-active={style === s.id} onClick={() => setStyle(s.id)} role="radio" aria-checked={style === s.id}>
-                    {s.name}
-                  </button>
-                ))}
-              </div>
+            <div className="mt-4 space-y-2.5 rounded-xl border border-hairline bg-white/[0.02] p-3">
+              <p className="label">Captions</p>
+              <OptionRow label="Style">
+                <div className="segmented" role="radiogroup" aria-label="Caption style">
+                  {CAPTION_STYLES.map((s) => (
+                    <button key={s.id} data-active={style === s.id} onClick={() => setStyle(s.id)} role="radio" aria-checked={style === s.id}>
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </OptionRow>
+              <OptionRow label="Size">
+                <div className="segmented" role="radiogroup" aria-label="Caption size">
+                  {(
+                    [
+                      ["s", "Small"],
+                      ["m", "Medium"],
+                      ["l", "Large"],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button key={v} data-active={capOpts.size === v} onClick={() => setCapOpts((o) => ({ ...o, size: v }))} role="radio" aria-checked={capOpts.size === v}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </OptionRow>
+              <OptionRow label="Position">
+                <div className="segmented" role="radiogroup" aria-label="Caption position">
+                  {(
+                    [
+                      ["top", "Top"],
+                      ["middle", "Middle"],
+                      ["bottom", "Bottom"],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button
+                      key={v}
+                      data-active={capOpts.position === v}
+                      onClick={() => setCapOpts((o) => ({ ...o, position: v }))}
+                      role="radio"
+                      aria-checked={capOpts.position === v}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </OptionRow>
+              <OptionRow label="Text">
+                <div className="flex gap-1.5">
+                  {(
+                    [
+                      ["caps", "ALL CAPS"],
+                      ["background", "Background box"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      aria-pressed={capOpts[k]}
+                      onClick={() => setCapOpts((o) => ({ ...o, [k]: !o[k] }))}
+                      disabled={k === "caps" && style === "pop"}
+                      title={k === "caps" && style === "pop" ? "Pop is always in capitals" : undefined}
+                      className={`h-7 rounded-md border px-2.5 text-[11px] font-medium transition-colors disabled:opacity-40 ${
+                        capOpts[k] || (k === "caps" && style === "pop")
+                          ? "border-accent bg-accent/15 text-fg"
+                          : "border-hairline text-fg-2 hover:border-hairline-strong hover:text-fg"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </OptionRow>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Accent color">
@@ -635,6 +703,15 @@ function EqBars() {
         <span key={i} className="w-[3px] origin-bottom rounded-sm bg-accent" style={{ height: "100%", animation: `eq 0.${5 + i}s ease-in-out ${i * 0.12}s infinite alternate` }} />
       ))}
     </span>
+  );
+}
+
+function OptionRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-[11px] text-fg-3">{label}</span>
+      {children}
+    </div>
   );
 }
 

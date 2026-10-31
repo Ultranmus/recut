@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { duration, timecode } from "@/lib/format";
 import { diffWords, groupDiff, keptShare } from "@/lib/diff";
 import { PLATFORMS, type Clip, type PlatformId, type Segment, type Word } from "@/lib/types";
-import { IconCheck, IconCopy, IconScissors, IconSparkle } from "../icons";
+import { IconCheck, IconCopy, IconEye, IconScissors, IconSparkle } from "../icons";
+import { PostPreviewDialog } from "./post-preview-dialog";
 
 export function ScoreRing({ score, size = 34 }: { score: number; size?: number }) {
   const r = (size - 4) / 2;
@@ -258,8 +259,10 @@ export function CaptionPanel({
   onReject,
   onAcceptAll,
   onCommitEdit,
+  media,
 }: {
   clip: Clip;
+  media: { cover?: string; show?: string };
   onChange: (c: Clip) => void;
   pending: Partial<Record<PlatformId, PendingChange>>;
   learning: PlatformId | null;
@@ -269,6 +272,7 @@ export function CaptionPanel({
   onCommitEdit: (p: PlatformId, before: string, after: string) => void;
 }) {
   const { copied, copy } = useCopy();
+  const [previewing, setPreviewing] = useState<PlatformId | null>(null);
   const pendingCount = Object.keys(pending).length;
   const all = PLATFORMS.map((p) => `${p.name}\n${clip.captions[p.id] ?? ""}`).join("\n\n");
 
@@ -306,14 +310,23 @@ export function CaptionPanel({
                 <span className="size-2 shrink-0 rounded-full" style={{ background: p.color }} />
                 <span className="text-[13px] font-medium">{p.name}</span>
               </div>
+              <span className="flex shrink-0 items-center">
               <button
-                className="btn btn-ghost h-7 shrink-0 gap-1.5 px-2 text-[11px]"
+                className="btn btn-ghost h-7 gap-1.5 px-2 text-[11px] text-accent hover:text-accent"
+                onClick={() => setPreviewing(p.id)}
+                title={`See how it looks on ${p.name} and post it`}
+              >
+                <IconEye size={13} /> Preview &amp; post
+              </button>
+              <button
+                className="btn btn-ghost h-7 gap-1.5 px-2 text-[11px]"
                 onClick={() => copy(p.id, text)}
                 aria-label={`Copy ${p.name} caption`}
               >
                 {copied === p.id ? <IconCheck size={13} className="text-success" /> : <IconCopy size={13} />}
                 {copied === p.id ? "Copied" : copied === `${p.id}:failed` ? "Copy blocked" : "Copy"}
               </button>
+              </span>
             </div>
             {pending[p.id] ? (
               <Suggestion change={pending[p.id]!} onAccept={() => onAccept(p.id)} onReject={() => onReject(p.id)} />
@@ -343,6 +356,8 @@ export function CaptionPanel({
           </section>
         );
       })}
+
+      {previewing ? <PostPreviewDialog platform={previewing} clip={clip} media={media} onClose={() => setPreviewing(null)} /> : null}
 
       {clip.hashtags.length ? (
         <section className="pt-1">
