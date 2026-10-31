@@ -101,7 +101,7 @@ export function lintCaption(text: string, rules: BrandRule[], platform: Platform
     const seen = new Set<string>();
     for (const n of names) {
       if (seen.has(n)) {
-        issues.push(`"${n}" appears twice in one sentence ("${sentence.trim().slice(0, 80)}"); rephrase so it reads naturally.`);
+        issues.push(`"${n}" appears twice in one sentence ("${sentence.trim().slice(0, 80)}"); rephrase so it reads naturally (e.g. "NASA unveils NASA's Gateway" -> "Meet NASA's Gateway").`);
         break;
       }
       seen.add(n);
@@ -115,6 +115,14 @@ export function lintCaption(text: string, rules: BrandRule[], platform: Platform
   issues.push(...namingIssues(text, rulesFor(rules, platform)));
   if (text.length > limit) issues.push(`Too long: ${text.length} characters, limit is ${limit}.`);
   return issues;
+}
+
+/**
+ * Last resort when the model keeps writing "NASA unveils NASA's Gateway": a sentence that opens by
+ * repeating a name as its own possessive becomes "Meet NASA's Gateway", which keeps naming rules intact.
+ */
+export function fixRepeatedName(text: string) {
+  return text.replace(/(^|[.!?]\s+|\n)([A-Z][A-Za-z0-9]+) [a-z]+ \2(['’]s )/g, "$1Meet $2$3");
 }
 
 const NAMING =

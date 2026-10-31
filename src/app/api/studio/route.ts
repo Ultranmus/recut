@@ -1,5 +1,6 @@
 import type { BrandRule, Learning } from "@/lib/brand-rules";
 import { learnRule, parseBrief, rerankClips, rewriteCaptions, type ClipRef, type RewriteInput } from "@/lib/studio-ai";
+import { sharedKeyError, sharedKeyLimit } from "@/lib/rate-limit";
 import type { PlatformId } from "@/lib/types";
 
 type Body =
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
   if (!key) {
     return Response.json({ error: "No server Groq key configured. Add one in Settings." }, { status: 400 });
   }
+  const limited = sharedKeyLimit(request, "studio");
+  if (limited) return limited;
+
   const body = (await request.json()) as Body;
   try {
     switch (body.action) {
@@ -31,6 +35,6 @@ export async function POST(request: Request) {
         return Response.json({ error: "Unknown action." }, { status: 400 });
     }
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "Request failed." }, { status: 502 });
+    return Response.json({ error: sharedKeyError(err, "Request failed.") }, { status: 502 });
   }
 }

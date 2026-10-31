@@ -1,6 +1,7 @@
 import { ANALYSIS_MODEL, fitLimit, groqJSON } from "./analysis";
 import {
   enforceRules,
+  fixRepeatedName,
   learningsPrompt,
   lintCaption,
   rulesFor,
@@ -294,6 +295,7 @@ ${failing.map((p) => `[${p}]\n${out[p]!.text}\nProblems:\n${issues[p]!.map((i) =
 Return JSON: {"captions":{"<platform id>":"fixed caption"}}, only for: ${failing.join(", ")}.`;
     collect(await groqJSON(chat(system, fixUser, 3500, "medium"), apiKey), out, failing);
   }
+  for (const r of Object.values(out)) if (r) r.text = fixRepeatedName(r.text);
   return out;
 }
 

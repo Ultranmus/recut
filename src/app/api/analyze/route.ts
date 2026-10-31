@@ -1,5 +1,6 @@
 import { runAnalysis } from "@/lib/analysis";
 import type { BrandRule, Learning } from "@/lib/brand-rules";
+import { sharedKeyError, sharedKeyLimit } from "@/lib/rate-limit";
 import type { Transcript } from "@/lib/types";
 
 // Finds clips and writes per-platform captions with the server's env key.
@@ -8,6 +9,9 @@ export async function POST(request: Request) {
   if (!key) {
     return Response.json({ error: "No server Groq key configured. Add one in Settings." }, { status: 400 });
   }
+
+  const limited = sharedKeyLimit(request, "analyze");
+  if (limited) return limited;
 
   const { transcript, name, rules, learnings } = (await request.json()) as {
     transcript?: Transcript;
@@ -20,6 +24,6 @@ export async function POST(request: Request) {
   try {
     return Response.json(await runAnalysis(transcript, name ?? "episode", key, undefined, (rules ?? []).slice(0, 50), (learnings ?? []).slice(-20)));
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "Analysis failed." }, { status: 502 });
+    return Response.json({ error: sharedKeyError(err, "Analysis failed.") }, { status: 502 });
   }
 }

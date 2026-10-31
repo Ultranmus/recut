@@ -49,11 +49,17 @@ There are two ways to supply a key:
 - **Server key** (`GROQ_API_KEY` in `.env.local`, or in your Vercel project's environment variables). It's used only inside API routes, never sent to the browser, and never logged. Prompts are built on the server, so the routes can't be used as an open LLM proxy.
 - **Your own key**, pasted in the app's **Settings**. It's stored only in your browser's local storage and sent straight from your browser to `api.groq.com`, never to this app's server. It takes priority over the server key.
 
+The server key is shared by everyone using a deployment, so each visitor gets a fair-use limit per 10 minutes (60 audio chunks, 8 analyses, 60 studio requests). Past that, the app asks them to add their own free key. The counts are kept per function instance, so treat this as a guard rather than a hard cap; add a [Vercel Firewall](https://vercel.com/docs/vercel-firewall) rate-limit rule on `/api/*` if you need one.
+
 Uploads are decoded in the browser and sent to Whisper in chunks of about 2 minutes, so large files stay under Vercel's request size limit. Projects, Brand Memory, the calendar and learnings live in your browser (IndexedDB and localStorage).
 
 ## Deploy your own
 
 Import the repo on [Vercel](https://vercel.com/new) and add `GROQ_API_KEY` as an environment variable. Nothing else is required.
+
+Optionally set `NEXT_PUBLIC_SITE_URL` (e.g. `https://recutapp.vercel.app`) so link previews and the sitemap use your preferred domain; otherwise the project's production domain is used.
+
+Recut is installable as an app (PWA). A small service worker keeps the app shell and pages you've opened available offline; uploads and AI features need a connection.
 
 ## Tech
 

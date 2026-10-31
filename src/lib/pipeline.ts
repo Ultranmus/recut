@@ -41,7 +41,9 @@ async function transcribeChunk(
     } else {
       res = await fetch("/api/transcribe", { method: "POST", body: form });
     }
-    if (res.status === 429 && attempt < 5) {
+    // Our own per-visitor limit on the shared key won't clear in seconds, so don't wait on it.
+    const sharedLimit = !userKey && res.status === 429 && (await res.clone().json().catch(() => ({}))).code === "shared_limit";
+    if (res.status === 429 && attempt < 5 && !sharedLimit) {
       const retry = Number(res.headers.get("retry-after"));
       await sleep((Number.isFinite(retry) && retry > 0 ? retry + 1 : 10) * 1000);
       continue;

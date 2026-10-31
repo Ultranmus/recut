@@ -1,4 +1,5 @@
 import { GROQ_BASE, TRANSCRIBE_MODEL, groqError } from "@/lib/analysis";
+import { sharedKeyLimit } from "@/lib/rate-limit";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -9,6 +10,9 @@ export async function POST(request: Request) {
   if (!key) {
     return Response.json({ error: "No server Groq key configured. Add one in Settings." }, { status: 400 });
   }
+
+  const limited = sharedKeyLimit(request, "transcribe");
+  if (limited) return limited;
 
   const form = await request.formData();
   const file = form.get("file");

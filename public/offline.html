@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <title>Offline · Recut</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: radial-gradient(circle at 15% 10%, rgba(10, 132, 255, 0.18), transparent 45%), #0a0a0c;
+        color: #f5f5f7;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      }
+      .card {
+        max-width: 400px;
+        text-align: center;
+        padding: 32px;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(30, 30, 34, 0.7);
+      }
+      img { width: 44px; height: 44px; }
+      p.code { margin: 20px 0 0; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #ffd60a; }
+      h1 { margin: 8px 0 0; font-size: 22px; font-weight: 600; }
+      p.body { margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: #a1a1aa; }
+      button {
+        margin-top: 24px; height: 36px; padding: 0 18px; border-radius: 10px; border: 0;
+        background: #0a84ff; color: #fff; font-size: 14px; cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="/icon.svg" alt="Recut" />
+      <p class="code">Offline</p>
+      <h1>You're not connected</h1>
+      <p class="body">This page hasn't been opened on this device yet, so it isn't saved for offline use. Reconnect and try again.</p>
+      <button onclick="location.reload()">Try again</button>
+    </div>
+  </body>
+</html>
