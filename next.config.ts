@@ -4,6 +4,15 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // The studio chat launcher lives bottom-left.
   devIndicators: { position: "bottom-right" },
+  // One public address: old Vercel hostnames send visitors (and their deep links) to the custom domain.
+  async redirects() {
+    return ["recutapp.vercel.app", "repurpose.vercel.app"].map((host) => ({
+      source: "/:path*",
+      has: [{ type: "host" as const, value: host }],
+      destination: "https://recut.ashvattech.com/:path*",
+      permanent: true,
+    }));
+  },
   async headers() {
     return [
       {
