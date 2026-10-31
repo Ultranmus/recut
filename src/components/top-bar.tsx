@@ -44,6 +44,12 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
           <span className={`text-[15px] font-semibold tracking-tight ${children ? "max-sm:hidden" : ""}`}>Recut</span>
         </Link>
         <div className="flex min-w-0 flex-1 items-center">{children}</div>
+        <Link
+          href="/features"
+          className={`btn btn-ghost h-8 px-2.5 text-[13px] ${children ? "max-md:hidden" : ""}`}
+        >
+          Features
+        </Link>
         {keyLabel ? (
           <button
             onClick={() => setOpen(true)}
