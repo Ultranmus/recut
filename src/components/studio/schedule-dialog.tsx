@@ -41,7 +41,13 @@ export function ScheduleDialog({
   const today = isoDate(new Date());
   const [selected, setSelected] = useState(clipId ?? clips[0]?.id ?? "");
   const [day, setDay] = useState(date && date >= today ? date : today);
-  const [time, setTime] = useState("09:00");
+  // Times already gone today can't be picked; the default is the next slot still ahead.
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  const gone = (d: string, t: string) => d === today && Boolean(t) && minutes(t) <= nowMinutes;
+  const firstFree = (d: string) => PRESETS.find((t) => !gone(d, t)) ?? "";
+  const [time, setTime] = useState(() => firstFree(date && date >= today ? date : today));
   const [platforms, setPlatforms] = useState<PlatformId[]>(PLATFORMS.map((p) => p.id));
   const clip = clips.find((c) => c.id === selected);
 
@@ -143,7 +149,10 @@ export function ScheduleDialog({
                 return (
                   <button
                     key={d}
-                    onClick={() => setDay(d)}
+                    onClick={() => {
+                      setDay(d);
+                      if (gone(d, time)) setTime(firstFree(d));
+                    }}
                     aria-pressed={on}
                     aria-label={dayLabel(d, { weekday: "long", month: "long", day: "numeric" })}
                     className={`flex min-w-0 flex-col items-center rounded-xl border py-2 transition-colors ${
@@ -168,8 +177,10 @@ export function ScheduleDialog({
                 <button
                   key={t}
                   onClick={() => setTime(t)}
+                  disabled={gone(day, t)}
+                  title={gone(day, t) ? "Already past today" : undefined}
                   aria-pressed={time === t}
-                  className={`h-8 rounded-lg border px-3 text-xs font-medium tabular-nums transition-colors ${
+                  className={`h-8 rounded-lg border px-3 text-xs font-medium tabular-nums transition-colors disabled:cursor-not-allowed disabled:line-through disabled:opacity-35 ${
                     time === t ? "border-accent bg-accent text-white" : "border-hairline bg-white/[0.03] text-fg-2 hover:border-hairline-strong hover:text-fg"
                   }`}
                 >
@@ -196,7 +207,7 @@ export function ScheduleDialog({
                 >
                   <option value="">Other time</option>
                   {SLOTS.map((t) => (
-                    <option key={t} value={t}>
+                    <option key={t} value={t} disabled={gone(day, t)}>
                       {formatTime(t)}
                     </option>
                   ))}

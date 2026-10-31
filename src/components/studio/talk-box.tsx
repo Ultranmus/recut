@@ -72,6 +72,7 @@ export function TalkToStudio({
   clips,
   targetClip,
   summary,
+  step,
   onSubmit,
   onClear,
   onNavigate,
@@ -82,6 +83,7 @@ export function TalkToStudio({
   clips: Clip[];
   targetClip: Clip | null;
   summary: string[];
+  step: string;
   onSubmit: (raw: string) => void;
   onClear: () => void;
   onNavigate: (target: BriefTarget, clipId?: string) => void;
@@ -214,7 +216,7 @@ export function TalkToStudio({
         aria-label="Open Talk to your studio"
       >
         <StudioBadge size={30} />
-        <span>{busy ? (state === "parsing" ? "Understanding…" : "Writing captions…") : "Talk to your studio"}</span>
+        <span className="max-w-[16rem] truncate">{busy ? step || "Working…" : "Talk to your studio"}</span>
         <kbd className="hidden rounded border border-hairline-strong bg-white/5 px-1.5 font-sans text-[10px] font-normal text-fg-3 sm:inline">/</kbd>
         {unread ? <span className="absolute right-1 top-1 size-2.5 rounded-full bg-accent ring-2 ring-bg" aria-label="New reply" /> : null}
       </button>
@@ -294,7 +296,7 @@ export function TalkToStudio({
                 <div className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-[13px] leading-relaxed text-white shadow-[0_6px_20px_-8px_rgba(10,132,255,0.7)]">
                   {t.raw}
                 </div>
-                <Reply result={isLive ? live : t.result!} state={isLive ? state : "done"} clips={clips} onNavigate={navigate} />
+                <Reply result={isLive ? live : t.result!} state={isLive ? state : "done"} step={step} clips={clips} onNavigate={navigate} />
               </div>
             );
           })
@@ -361,11 +363,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function Reply({
   result,
   state,
+  step,
   clips,
   onNavigate,
 }: {
   result: Result;
   state: BriefState;
+  step: string;
   clips: Clip[];
   onNavigate: (target: BriefTarget, clipId?: string) => void;
 }) {
@@ -381,7 +385,7 @@ function Reply({
             <span key={i} className="size-1.5 animate-bounce rounded-full bg-fg-3" style={{ animationDelay: `${i * 120}ms` }} />
           ))}
         </span>
-        Understanding your brief…
+        {step || "Understanding your brief…"}
       </div>
     );
   }
@@ -521,7 +525,7 @@ function Reply({
       <div className="mt-3 border-t border-hairline pt-2.5">
         {state === "writing" ? (
           <p className="flex items-center gap-2 text-[12px] text-accent">
-            <span className="size-1.5 animate-pulse rounded-full bg-accent" /> Writing captions…
+            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" /> {step || "Working on it…"}
           </p>
         ) : error ? (
           <p className="text-[12px] text-danger">{error}</p>

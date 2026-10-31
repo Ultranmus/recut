@@ -330,13 +330,13 @@ export function CaptionPanel({
                 <span className="size-1.5 animate-pulse rounded-full bg-accent-3" /> Learning from your edit…
               </p>
             ) : null}
-            <div className="mt-1.5 flex items-center justify-between gap-3 text-[11px]">
-              <span className="truncate text-fg-3">{p.tone}</span>
+            <div className="mt-1.5 flex items-start justify-between gap-3 text-[11px] leading-snug">
+              <span className="min-w-0 text-fg-3">{p.tone}</span>
               <span
                 className={`shrink-0 font-mono tabular-nums ${over ? "text-danger" : "text-fg-3"}`}
                 title={folded ? `Feeds show about the first ${p.visible} characters before truncating` : undefined}
               >
-                {folded ? <span className="mr-1.5 text-warning/80">fold @{p.visible}</span> : null}
+                {folded ? <span className="mr-1.5 text-warning/80">“more” at {p.visible}</span> : null}
                 {text.length}/{p.limit}
               </span>
             </div>

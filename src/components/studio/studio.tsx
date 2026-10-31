@@ -51,6 +51,8 @@ export function Studio({ id }: { id: string }) {
   const [briefError, setBriefError] = useState<string | null>(null);
   const [briefClipId, setBriefClipId] = useState<string | null>(null);
   const [scheduling, setScheduling] = useState<string | null>(null);
+  // What the brief is doing right now, shown live in the chat ("Adding 2 posts to the calendar…").
+  const [briefStep, setBriefStep] = useState("");
   /** Suggested caption changes awaiting review, keyed by clip id then platform. */
   const [pending, setPending] = useState<Record<string, Partial<Record<PlatformId, PendingChange>>>>({});
   const [learning, setLearning] = useState<PlatformId | null>(null);
@@ -210,6 +212,7 @@ export function Studio({ id }: { id: string }) {
     setBriefError(null);
     setSummary([]);
     setBriefClipId(null);
+    setBriefStep("Understanding your brief…");
     setBriefState("parsing");
     try {
       const b = await briefAI(
@@ -219,12 +222,14 @@ export function Studio({ id }: { id: string }) {
       );
       setBrief(b);
       setBriefState("writing");
+      if (b.rules.length) setBriefStep(`Saving ${b.rules.length} brand rule${b.rules.length === 1 ? "" : "s"}…`);
       const done: string[] = [];
       const added = addRules(b.rules.map((text) => ({ text, source: "voice" as const, scope: "all" as const })));
       if (added.length) done.push(`${added.length} rule${added.length === 1 ? "" : "s"} saved`);
       const byId = new Map(clips.map((c) => [c.id, c]));
 
       // Calendar: put each scheduled clip on its day and jump to that week.
+      if (b.schedule.length) setBriefStep(`Adding ${b.schedule.length} post${b.schedule.length === 1 ? "" : "s"} to the calendar…`);
       const entries = schedule(
         b.schedule
           .filter((s) => byId.has(s.clipId))
@@ -252,6 +257,7 @@ export function Studio({ id }: { id: string }) {
       }
 
       // Performance feedback becomes learnings, which immediately re-rank this episode.
+      if (b.feedback.length) setBriefStep(`Saving ${b.feedback.length} result${b.feedback.length === 1 ? "" : "s"} as learnings…`);
       const saved = addLearnings(
         b.feedback
           .map((f) => ({ ...f, clipId: f.clipId || (b.feedback.length === 1 ? b.clipIds[0] ?? "" : "") }))
@@ -274,6 +280,7 @@ export function Studio({ id }: { id: string }) {
       );
       if (saved.length) {
         done.push(`${saved.length} learning${saved.length === 1 ? "" : "s"} saved`);
+        setBriefStep("Re-ranking clips with your results…");
         const moved = await applyLearnings();
         if (moved) done.push(`${moved} clip${moved === 1 ? "" : "s"} re-ranked`);
       }
@@ -286,13 +293,18 @@ export function Studio({ id }: { id: string }) {
         setSelectedId(target.id);
         setTab("captions");
         const briefed = b.platforms.length ? b.platforms : ALL_PLATFORMS;
+        setBriefStep(`Writing ${PLATFORMS.filter((p) => briefed.includes(p.id)).map((p) => p.short).join(", ")} captions for “${target.title}”…`);
         let n = await rewrite(target, "brief", briefed, { tone: b.tone, topic: b.topic, instructions: b.cleaned });
         // New rules apply everywhere: show how they change this clip's other platforms too.
         const others = ALL_PLATFORMS.filter((p) => !briefed.includes(p));
-        if (added.length && others.length) n += await rewrite(target, "rules", others);
+        if (added.length && others.length) {
+          setBriefStep("Checking the other captions against your new rules…");
+          n += await rewrite(target, "rules", others);
+        }
         done.push(n ? `${n} caption${n === 1 ? "" : "s"} ready to review` : "captions already match");
         if (!entries.length) setView("studio");
       } else if (added.length) {
+        setBriefStep("Checking captions against your new rules…");
         const n = await rewrite(target, "rules", ALL_PLATFORMS);
         if (n) {
           setSelectedId(target.id);
@@ -645,6 +657,7 @@ export function Studio({ id }: { id: string }) {
         clips={clips}
         targetClip={clips.find((c) => c.id === briefClipId) ?? null}
         summary={summary}
+        step={briefStep}
         onSubmit={runBrief}
         onNavigate={(target, id) => {
           if (id) setSelectedId(id);

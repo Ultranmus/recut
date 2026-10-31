@@ -90,7 +90,7 @@ export function CalendarView({
         </div>
       </header>
 
-      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 sm:grid-cols-2 lg:grid-cols-7 lg:gap-px lg:bg-white/[0.04] lg:p-0 xl:overflow-y-auto">
+      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 sm:grid-cols-2 lg:grid-cols-7 lg:grid-rows-[minmax(0,1fr)] lg:gap-px lg:bg-white/[0.04] lg:p-0">
         {days.map((d) => {
           const iso = isoDate(d);
           const dayEntries = inWeek.filter((e) => e.date === iso).sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
@@ -110,7 +110,7 @@ export function CalendarView({
                 const id = e.dataTransfer.getData("text/entry");
                 if (id) moveEntry(id, iso);
               }}
-              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:rounded-xl max-lg:border max-lg:border-hairline lg:min-h-40 lg:pb-16 ${
+              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:rounded-xl max-lg:border max-lg:border-hairline lg:min-h-40 lg:overflow-hidden lg:pb-16 ${
                 past && !dayEntries.length ? "" : "max-lg:min-h-24"
               } ${dragOver === iso ? "bg-accent/10" : ""} ${
                 past ? "opacity-70" : ""
@@ -129,6 +129,8 @@ export function CalendarView({
                 </span>
               </div>
 
+              {/* On desktop each day scrolls on its own, so a busy day can't spill out of the calendar. */}
+              <div className="scroll-thin -mx-1 flex flex-col gap-2 px-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
               {dayEntries.map((e) => {
                 const local = e.projectId === project.id;
                 const learning = learnings.find((l) => l.projectId === e.projectId && l.clipId === e.clipId);
@@ -147,51 +149,62 @@ export function CalendarView({
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-[10px] font-medium tabular-nums text-fg-3">{formatTime(e.time) || "Any time"}</span>
-                      <button
-                        className="-mr-1 -mt-1 grid size-5 place-items-center rounded text-fg-3 opacity-0 transition-opacity hover:bg-white/10 hover:text-fg group-hover:opacity-100"
-                        onClick={() => unschedule(e.id)}
-                        aria-label={`Remove ${e.clipTitle} from ${iso}`}
-                      >
-                        <IconClose size={11} />
-                      </button>
+                      <span className="-mr-1 -mt-1 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                        <a
+                          href={googleCalendarUrl(e, local ? clips.find((c) => c.id === e.clipId) : undefined)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="grid size-5 place-items-center rounded text-fg-3 hover:bg-white/10 hover:text-fg"
+                          title="Add to Google Calendar, with the time and the captions to publish"
+                          aria-label={`Add ${e.clipTitle} to Google Calendar`}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                            <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                            <path d="M3.5 10h17M8 3v4M16 3v4" />
+                          </svg>
+                        </a>
+                        <button
+                          className="grid size-5 place-items-center rounded text-fg-3 hover:bg-white/10 hover:text-fg"
+                          onClick={() => unschedule(e.id)}
+                          aria-label={`Remove ${e.clipTitle} from ${iso}`}
+                          title="Remove"
+                        >
+                          <IconClose size={11} />
+                        </button>
+                      </span>
                     </div>
                     <button className="mt-0.5 block text-left text-[13px] font-medium leading-snug hover:text-accent" onClick={() => local && onOpenClip(e.clipId)}>
                       {e.clipTitle}
                     </button>
                     {!local ? <p className="mt-0.5 truncate text-[10px] text-fg-3">{e.projectName}</p> : null}
-                    <a
-                      href={googleCalendarUrl(e, local ? clips.find((c) => c.id === e.clipId) : undefined)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-[10px] text-fg-3 hover:text-accent"
-                      title="Opens Google Calendar with this post, its time and the captions to publish"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                        <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
-                        <path d="M3.5 10h17M8 3v4M16 3v4" />
-                      </svg>
-                      Add to Google Calendar
-                    </a>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {(e.platforms.length ? PLATFORMS.filter((p) => e.platforms.includes(p.id)) : PLATFORMS).map((p) => (
-                        <span key={p.id} className="flex items-center gap-1 rounded bg-white/6 px-1 py-px text-[9px] text-fg-2">
-                          <span className="size-1 rounded-full" style={{ background: p.color }} />
-                          {p.short}
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <span
+                        className="flex items-center gap-1"
+                        title={(e.platforms.length ? PLATFORMS.filter((p) => e.platforms.includes(p.id)) : PLATFORMS).map((p) => p.name).join(", ")}
+                      >
+                        {(e.platforms.length ? PLATFORMS.filter((p) => e.platforms.includes(p.id)) : PLATFORMS).map((p) => (
+                          <span key={p.id} className="size-1.5 rounded-full" style={{ background: p.color }} />
+                        ))}
+                        <span className="ml-0.5 whitespace-nowrap text-[10px] text-fg-3">
+                          {!e.platforms.length || e.platforms.length === PLATFORMS.length
+                            ? "All platforms"
+                            : PLATFORMS.filter((p) => e.platforms.includes(p.id)).map((p) => p.short).join(", ")}
                         </span>
-                      ))}
+                      </span>
+                      {!badge && local ? (
+                        <button
+                          className="shrink-0 text-[10px] text-fg-3 opacity-0 transition-opacity hover:text-accent group-hover:opacity-100 focus:opacity-100"
+                          onClick={() => setFeedbackFor(feedbackFor === e.id ? null : e.id)}
+                        >
+                          How did it do?
+                        </button>
+                      ) : null}
                     </div>
                     {badge ? (
                       <p className="mt-1.5 flex items-center gap-1.5 text-[10px]">
                         <span className={`rounded px-1.5 py-px font-semibold ${badge.cls}`}>{badge.text}</span>
                         <span className="truncate text-fg-3">{learning?.metric}</span>
                       </p>
-                    ) : local ? (
-                      <button
-                        className="mt-1.5 text-[10px] text-fg-3 opacity-0 transition-opacity hover:text-accent group-hover:opacity-100 focus:opacity-100"
-                        onClick={() => setFeedbackFor(feedbackFor === e.id ? null : e.id)}
-                      >
-                        How did it do?
-                      </button>
                     ) : null}
                     {feedbackFor === e.id ? (
                       <FeedbackForm
@@ -209,9 +222,10 @@ export function CalendarView({
               })}
 
               {past && !dayEntries.length ? <p className="px-0.5 text-[11px] text-fg-3">No posts</p> : null}
+              </div>
               {past ? null : (
                 <button
-                  className="mt-auto rounded-lg border border-dashed border-white/10 py-1.5 text-[11px] text-fg-3 transition-colors hover:border-accent/50 hover:bg-accent/5 hover:text-fg"
+                  className="mt-auto shrink-0 rounded-lg border border-dashed border-white/10 py-1.5 text-[11px] text-fg-3 transition-colors hover:border-accent/50 hover:bg-accent/5 hover:text-fg"
                   onClick={() => setAdding(iso)}
                   aria-label={`Schedule a post on ${d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`}
                 >
