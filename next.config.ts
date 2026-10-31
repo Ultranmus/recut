@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The studio chat launcher lives bottom-left.
+  devIndicators: { position: "bottom-right" },
   async headers() {
     return [
       {

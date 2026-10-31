@@ -5,16 +5,32 @@ import { transcribeVoiceNote } from "@/lib/pipeline";
 import { getGroqKey } from "@/lib/settings";
 import type { ParsedBrief } from "@/lib/studio-ai";
 import { PLATFORMS, type Clip } from "@/lib/types";
-import { IconCheck, IconSparkle } from "../icons";
+import { IconCheck, IconClose, IconSparkle, IconTrash } from "../icons";
 
 export type BriefState = "idle" | "parsing" | "writing" | "done" | "error";
+export type BriefTarget = "captions" | "calendar" | "brand";
 
 const MAX_CHARS = 4000;
+const SEND_BRIEF = "recut:send-brief";
 
 const EXAMPLES = [
-  "Okay so um, I want to, uh, post the bit about the Gateway space station. Put it on LinkedIn, no wait, actually make that X and Instagram. Keep it, like, curious and kind of playful, but you know, not cheesy. Oh and, um, from now on no emojis, ever. And always say NASA's Gateway, not just Gateway.",
-  "Um, so post the Gateway clip on Tuesday, uh, on X at like 9am. And the political risk one, put that on Thursday, no wait, Friday. Oh and the Cold War clip we posted last week got, like, forty thousand views on Reels, and the humans versus robots one totally flopped. Anyway my coffee machine broke this morning, whatever.",
+  {
+    label: "Captions + brand rules",
+    text: "Okay so um, I want to, uh, post the bit about the Gateway space station. Put it on LinkedIn, no wait, actually make that X and Instagram. Keep it, like, curious and kind of playful, but you know, not cheesy. Oh and, um, from now on no emojis, ever. And always say NASA's Gateway, not just Gateway.",
+  },
+  {
+    label: "Calendar + results",
+    text: "Um, so post the Gateway clip on Tuesday, uh, on X at like 9am. And the political risk one, put that on Thursday, no wait, Friday. Oh and the Cold War clip we posted last week got, like, forty thousand views on Reels, and the humans versus robots one totally flopped. Anyway my coffee machine broke this morning, whatever.",
+  },
 ];
+
+/** Sends a sentence to the studio chat from anywhere (e.g. "How did it do?" on the calendar). */
+export function sendBrief(text: string) {
+  window.dispatchEvent(new CustomEvent(SEND_BRIEF, { detail: text }));
+}
+
+type Result = { brief: ParsedBrief | null; clipId: string | null; clipTitle: string | null; summary: string[]; error: string | null };
+type Turn = { id: number; raw: string; result?: Result };
 
 function MicIcon({ size = 16 }: { size?: number }) {
   return (
@@ -25,6 +41,29 @@ function MicIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function SendIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
+    </svg>
+  );
+}
+
+function StudioBadge({ size = 32 }: { size?: number }) {
+  return (
+    <span
+      className="grid shrink-0 place-items-center rounded-[10px] bg-gradient-to-br from-[#2b95ff] via-[#5e5ce6] to-[#bf5af2] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_6px_18px_-6px_rgba(94,92,230,0.8)]"
+      style={{ width: size, height: size }}
+    >
+      <MicIcon size={Math.round(size / 2)} />
+    </span>
+  );
+}
+
+/**
+ * "Talk to your studio" as a chat that floats over the studio, so the clips, preview and captions
+ * keep their full height. Each brief is a message; the reply shows what the editor understood.
+ */
 export function TalkToStudio({
   state,
   error,
@@ -34,6 +73,7 @@ export function TalkToStudio({
   summary,
   onSubmit,
   onClear,
+  onNavigate,
 }: {
   state: BriefState;
   error: string | null;
@@ -43,23 +83,56 @@ export function TalkToStudio({
   summary: string[];
   onSubmit: (raw: string) => void;
   onClear: () => void;
+  onNavigate: (target: BriefTarget, clipId?: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [example, setExample] = useState(0);
-  const titleOf = (id: string) => clips.find((c) => c.id === id)?.title;
-  const [open, setOpen] = useState(true);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [seen, setSeen] = useState(0);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
+  const thread = useRef<HTMLDivElement>(null);
   const busy = state === "parsing" || state === "writing";
+  const settled = state === "done" || state === "error";
+  // The newest turn renders the live brief; earlier ones keep the snapshot taken when the next was sent.
+  const finished = settled ? turns.length : Math.max(0, turns.length - 1);
+  const unread = !open && finished > seen;
 
-  // "/" anywhere jumps to the brief box, so the creator can hold fn and talk straight away.
+  const live: Result = { brief, clipId: targetClip?.id ?? null, clipTitle: targetClip?.title ?? null, summary, error };
+
+  function show(next: boolean) {
+    setOpen(next);
+    setSeen(finished);
+    if (next) requestAnimationFrame(() => area.current?.focus());
+  }
+
+  function submit(raw = text) {
+    const said = raw.trim();
+    if (!said || busy) return;
+    setTurns((ts) => [...ts.map((t, i) => (i === ts.length - 1 && !t.result ? { ...t, result: live } : t)), { id: Date.now(), raw: said }]);
+    if (raw === text) setText("");
+    setOpen(true);
+    onSubmit(said);
+  }
+
+  // Keep the newest message in view as the reply streams in.
+  useEffect(() => {
+    const el = thread.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [turns.length, state, open]);
+
+  // "/" anywhere opens the chat, so the creator can hold fn and talk straight away.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
+      if (e.key === "Escape" && el.closest("[data-studio-chat]")) {
+        setOpen(false);
+        return;
+      }
       if (e.key !== "/" || e.metaKey || e.ctrlKey || el.closest("input, textarea, select, [contenteditable]")) return;
       e.preventDefault();
       setOpen(true);
@@ -67,7 +140,14 @@ export function TalkToStudio({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  });
+
+  // Sentences sent from elsewhere in the studio arrive as chat messages too.
+  useEffect(() => {
+    const onSend = (e: Event) => submit(String((e as CustomEvent).detail ?? ""));
+    window.addEventListener(SEND_BRIEF, onSend);
+    return () => window.removeEventListener(SEND_BRIEF, onSend);
+  });
 
   useEffect(() => {
     if (!recording) return;
@@ -75,10 +155,13 @@ export function TalkToStudio({
     return () => clearInterval(t);
   }, [recording]);
 
-  function submit() {
-    if (!text.trim() || busy) return;
-    onSubmit(text.trim());
-  }
+  // Grow the composer with what's dictated, up to a few lines.
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
+  }, [text, open]);
 
   async function toggleMic() {
     setMicError(null);
@@ -114,274 +197,358 @@ export function TalkToStudio({
     }
   }
 
+  function navigate(target: BriefTarget, clipId?: string) {
+    onNavigate(target, clipId);
+    // On phones the chat covers the studio, so step aside to show the result.
+    if (window.matchMedia("(max-width: 1023px)").matches) show(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => show(true)}
+        className={`window fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 flex bg-[rgba(24,24,28,0.94)] items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-4 text-sm font-medium transition-transform hover:scale-[1.02] active:scale-[0.98] ${
+          busy ? "shadow-[0_0_0_1px_rgba(10,132,255,0.5),0_12px_40px_-10px_rgba(10,132,255,0.6)]" : ""
+        }`}
+        aria-label="Open Talk to your studio"
+      >
+        <StudioBadge size={30} />
+        <span>{busy ? (state === "parsing" ? "Understanding…" : "Writing captions…") : "Talk to your studio"}</span>
+        <kbd className="hidden rounded border border-hairline-strong bg-white/5 px-1.5 font-sans text-[10px] font-normal text-fg-3 sm:inline">/</kbd>
+        {unread ? <span className="absolute right-1 top-1 size-2.5 rounded-full bg-accent ring-2 ring-bg" aria-label="New reply" /> : null}
+      </button>
+    );
+  }
+
   return (
     <section
-      className={`glass relative shrink-0 overflow-hidden rounded-2xl transition-shadow duration-500 ${
-        busy || recording ? "shadow-[0_0_0_1px_rgba(10,132,255,0.45),0_20px_60px_-20px_rgba(10,132,255,0.5)]" : ""
-      }`}
+      data-studio-chat
       aria-label="Talk to your studio"
+      className={`window rise fixed inset-x-2 bottom-2 z-40 flex bg-[rgba(20,20,24,0.97)] h-[min(86dvh,44rem)] flex-col overflow-hidden rounded-2xl sm:inset-x-auto sm:bottom-4 sm:left-4 sm:h-[min(calc(100dvh-6rem),42rem)] sm:w-[25rem] ${
+        busy || recording ? "shadow-[0_0_0_1px_rgba(10,132,255,0.45),0_30px_80px_-20px_rgba(10,132,255,0.45)]" : ""
+      }`}
     >
-      <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 size-64 rounded-full bg-accent/15 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute -right-10 -top-28 size-56 rounded-full bg-accent-3/12 blur-3xl" />
-
-      <div className="relative flex items-center justify-between gap-3 px-4 pt-3.5">
-        <div className="flex items-center gap-3">
-          <span className="grid size-8 place-items-center rounded-[10px] bg-gradient-to-br from-[#2b95ff] via-[#5e5ce6] to-[#bf5af2] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_6px_18px_-6px_rgba(94,92,230,0.8)]">
-            <MicIcon size={16} />
-          </span>
-          <div>
-            <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-              Talk to your studio
-              <kbd className="hidden rounded border border-hairline-strong bg-white/5 px-1.5 font-sans text-[10px] font-normal text-fg-3 sm:inline" title="Press / to focus">
-                /
-              </kbd>
-            </h2>
-            <p className="text-xs text-fg-3">
-              Brief it like a video editor. Hold <kbd className="rounded border border-hairline-strong bg-white/5 px-1 font-sans text-[10px] text-fg-2">fn</kbd> to dictate
-              with Wispr Flow; filler words and “no wait, actually…” are handled.
-            </p>
-          </div>
+      <header className="flex items-center gap-3 border-b border-hairline px-4 py-3">
+        <StudioBadge size={32} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold tracking-tight">Talk to your studio</h2>
+          <p className="truncate text-[11px] text-fg-3">
+            Hold <kbd className="rounded border border-hairline-strong bg-white/5 px-1 font-sans text-[10px] text-fg-2">fn</kbd> to dictate with Wispr Flow
+          </p>
         </div>
-        <button className="btn btn-ghost h-7 px-2 text-xs" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          {open ? "Hide" : "Show"}
+        {turns.length ? (
+          <button
+            className="btn btn-ghost h-8 w-8 p-0"
+            disabled={busy}
+            onClick={() => {
+              setTurns([]);
+              setSeen(0);
+              onClear();
+              area.current?.focus();
+            }}
+            aria-label="Clear conversation"
+            title="Clear conversation"
+          >
+            <IconTrash size={15} />
+          </button>
+        ) : null}
+        <button className="btn btn-ghost h-8 w-8 p-0" onClick={() => show(false)} aria-label="Minimize chat" title="Minimize (Esc)">
+          <IconClose size={16} />
         </button>
-      </div>
+      </header>
 
-      {open ? (
-        <div className="relative grid gap-4 p-4 pt-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-          {/* Input */}
-          <div className="flex flex-col">
-            <div className="relative flex-1">
-              <textarea
-                ref={area}
-                value={text}
-                onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
-                rows={4}
-                placeholder="“Um, take the Gateway bit and make it for LinkedIn, no wait, X. Keep it curious. And from now on, no emojis…”"
-                className="field scroll-thin h-full min-h-28 resize-none bg-black/30 py-3 text-[15px] leading-relaxed placeholder:text-fg-3"
-                aria-label="Spoken brief"
-              />
-              {text.length > MAX_CHARS * 0.85 ? (
-                <span className="absolute bottom-2 right-3 text-[10px] tabular-nums text-warning">
-                  {text.length}/{MAX_CHARS}
-                </span>
-              ) : null}
-              {recording ? (
-                <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-danger/15 px-2.5 py-1 text-[11px] font-medium text-danger">
-                  <span className="size-1.5 animate-pulse rounded-full bg-danger" /> Listening {seconds}s
-                </span>
-              ) : null}
+      <div ref={thread} className="scroll-thin min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
+        {turns.length === 0 ? (
+          <div className="flex h-full flex-col justify-end gap-4 pb-1">
+            <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-hairline bg-white/[0.04] px-3.5 py-3 text-[13px] leading-relaxed text-fg-2">
+              <p className="font-medium text-fg">Brief me like you&apos;d brief a video editor.</p>
+              <p className="mt-1.5">
+                Say which clip, which platforms and the tone. Add lasting rules (&ldquo;never use emojis&rdquo;), schedule posts (&ldquo;Gateway clip on
+                Tuesday&rdquo;) or tell me how a clip did. Filler words, &ldquo;no wait, actually…&rdquo; and tangents are handled.
+              </p>
             </div>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <button
-                className={`btn h-8 px-3 text-xs ${recording ? "bg-danger text-white hover:bg-danger/90" : "btn-secondary"}`}
-                onClick={toggleMic}
-                disabled={transcribing || busy}
-                title="No Wispr Flow? Record here and Groq Whisper transcribes it."
-              >
-                <MicIcon size={14} />
-                {recording ? "Stop" : transcribing ? "Transcribing…" : "Record"}
-              </button>
-              <button
-                className="btn btn-ghost h-8 px-2.5 text-xs"
-                onClick={() => {
-                  setText(EXAMPLES[example % EXAMPLES.length]);
-                  setExample((n) => n + 1);
-                }}
-                disabled={busy}
-                title="Cycles through example briefs: captions & rules, then calendar & feedback"
-              >
-                Try a messy example{example ? ` (${(example % EXAMPLES.length) + 1}/${EXAMPLES.length})` : ""}
-              </button>
-              {text || brief ? (
-                <button
-                  className="btn btn-ghost h-8 px-2.5 text-xs"
-                  disabled={busy}
-                  onClick={() => {
-                    setText("");
-                    onClear();
-                    area.current?.focus();
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-              <span className="ml-auto hidden text-[11px] text-fg-3 sm:inline">⌘↵</span>
-              <button className="btn btn-primary h-8 text-xs" onClick={submit} disabled={!text.trim() || busy}>
-                <IconSparkle size={14} />
-                {state === "parsing" ? "Understanding…" : state === "writing" ? "Writing captions…" : "Brief the editor"}
-              </button>
-            </div>
-            {micError || error ? <p className="mt-2 text-xs text-danger">{micError ?? error}</p> : null}
-          </div>
-
-          {/* What it understood */}
-          <div className="rounded-xl border border-hairline bg-black/20 p-3.5">
-            <div className="mb-2.5 flex items-center justify-between">
-              <h3 className="label">What I understood</h3>
-              {state === "writing" ? <span className="text-[11px] text-accent">Working on it…</span> : null}
-            </div>
-
-            {state === "parsing" ? (
-              <div className="space-y-2.5">
-                {[70, 45, 55, 80].map((w, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="h-3 w-16 animate-pulse rounded bg-white/8" />
-                    <div className="h-3 animate-pulse rounded bg-white/10" style={{ width: `${w}%` }} />
-                  </div>
+            <div>
+              <p className="label mb-2">Try a messy example</p>
+              <div className="flex flex-wrap gap-1.5">
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex.label}
+                    onClick={() => {
+                      setText(ex.text);
+                      area.current?.focus();
+                    }}
+                    className="rounded-full border border-hairline-strong bg-white/[0.04] px-3 py-1.5 text-xs text-fg-2 transition-colors hover:border-accent/50 hover:text-fg"
+                  >
+                    {ex.label}
+                  </button>
                 ))}
               </div>
-            ) : (
-              <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[13px]">
-                <dt className="text-fg-3">Topic</dt>
-                <dd className={brief?.topic ? "" : "text-fg-3"}>
-                  {brief ? brief.topic || (brief.wantsCaptions ? "Current clip" : "—") : "—"}
-                  {brief && targetClip ? <span className="ml-1.5 text-[11px] text-accent">→ {targetClip.title}</span> : null}
-                </dd>
-
-                <dt className="text-fg-3">Platform</dt>
-                <dd className="flex flex-wrap gap-1">
-                  {brief && (brief.platforms.length || brief.wantsCaptions) ? (
-                    (brief.platforms.length ? PLATFORMS.filter((p) => brief.platforms.includes(p.id)) : PLATFORMS).map((p) => (
-                      <span key={p.id} className="flex items-center gap-1 rounded-md bg-white/7 px-1.5 py-0.5 text-[11px]">
-                        <span className="size-1.5 rounded-full" style={{ background: p.color }} />
-                        {p.short}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-fg-3">—</span>
-                  )}
-                </dd>
-
-                <dt className="text-fg-3">Tone</dt>
-                <dd className={brief?.tone ? "" : "text-fg-3"}>{brief ? brief.tone || (brief.wantsCaptions ? "Keep current tone" : "—") : "—"}</dd>
-
-                <dt className="text-fg-3">Brand rules</dt>
-                <dd className="space-y-1">
-                  {brief?.rules.length ? (
-                    brief.rules.map((r) => (
-                      <p key={r} className="flex items-start gap-1.5">
-                        <IconCheck size={13} className="mt-0.5 shrink-0 text-success" />
-                        <span>
-                          {r} <span className="text-[11px] text-fg-3">· saved to memory</span>
-                        </span>
-                      </p>
-                    ))
-                  ) : (
-                    <span className="text-fg-3">{brief ? "None new" : "—"}</span>
-                  )}
-                </dd>
-
-                {brief?.schedule.length ? (
-                  <>
-                    <dt className="text-fg-3">Schedule</dt>
-                    <dd className="space-y-1 text-[12px]">
-                      {brief.schedule.map((s, i) => (
-                        <p key={i} className="flex items-start gap-1.5">
-                          {s.clipId ? (
-                            <IconCheck size={13} className="mt-0.5 shrink-0 text-success" />
-                          ) : (
-                            <span className="mt-px shrink-0 text-warning">!</span>
-                          )}
-                          <span>
-                            <span className="font-medium">
-                              {new Date(`${s.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-                              {s.time ? ` · ${s.time}` : ""}
-                            </span>{" "}
-                            {s.clipId ? (
-                              <>
-                                {titleOf(s.clipId)}
-                                {s.platforms.length ? ` · ${PLATFORMS.filter((p) => s.platforms.includes(p.id)).map((p) => p.short).join(", ")}` : ""}
-                                <span className="text-[11px] text-fg-3"> · on calendar</span>
-                              </>
-                            ) : (
-                              <span className="text-warning">no clip in this episode matches “{s.clipQuery}”</span>
-                            )}
-                          </span>
-                        </p>
-                      ))}
-                    </dd>
-                  </>
-                ) : null}
-
-                {brief?.feedback.length ? (
-                  <>
-                    <dt className="text-fg-3">Feedback</dt>
-                    <dd className="space-y-1 text-[12px]">
-                      {brief.feedback.map((f, i) => (
-                        <p key={i} className="flex items-start gap-1.5">
-                          <span className={`shrink-0 font-semibold ${f.outcome === "hit" ? "text-success" : f.outcome === "flop" ? "text-danger" : "text-fg-2"}`}>
-                            {f.outcome === "hit" ? "▲" : f.outcome === "flop" ? "▼" : "•"}
-                          </span>
-                          <span>
-                            {f.clipId ? (
-                              <>
-                                <span className="font-medium">{titleOf(f.clipId)}</span>: {f.metric || f.outcome}
-                                {f.platform ? ` on ${PLATFORMS.find((p) => p.id === f.platform)?.short}` : ""}
-                                <span className="text-[11px] text-fg-3"> · saved as a learning</span>
-                              </>
-                            ) : (
-                              <span className="text-warning">no clip in this episode matches “{f.clipQuery}”</span>
-                            )}
-                          </span>
-                        </p>
-                      ))}
-                    </dd>
-                  </>
-                ) : null}
-
-                {brief?.corrections.length ? (
-                  <>
-                    <dt className="text-fg-3">Corrected</dt>
-                    <dd className="space-y-0.5 text-[12px]">
-                      {brief.corrections.map((c, i) => (
-                        <p key={i}>
-                          <span className="text-fg-3 line-through decoration-danger/70">{c.from}</span>
-                          <span className="mx-1.5 text-fg-3">→</span>
-                          <span>{c.to}</span>
-                        </p>
-                      ))}
-                    </dd>
-                  </>
-                ) : null}
-
-                {brief?.digressions?.length ? (
-                  <>
-                    <dt className="text-fg-3">Set aside</dt>
-                    <dd className="space-y-0.5 text-[12px] text-fg-3">
-                      {brief.digressions.map((d) => (
-                        <p key={d}>“{d}”</p>
-                      ))}
-                    </dd>
-                  </>
-                ) : null}
-
-                {brief?.fillers.length ? (
-                  <>
-                    <dt className="text-fg-3">Ignored</dt>
-                    <dd className="flex flex-wrap gap-1">
-                      {brief.fillers.map((f) => (
-                        <span key={f} className="rounded bg-white/5 px-1.5 py-px text-[11px] text-fg-3 line-through">
-                          {f}
-                        </span>
-                      ))}
-                    </dd>
-                  </>
-                ) : null}
-              </dl>
-            )}
-            {state === "done" && summary.length ? (
-              <p className="mt-3 border-t border-hairline pt-2.5 text-[11px] text-success">{summary.join(" · ")}</p>
-            ) : null}
+            </div>
           </div>
+        ) : (
+          turns.map((t, i) => {
+            const isLive = i === turns.length - 1 && !t.result;
+            return (
+              <div key={t.id} className="space-y-2.5">
+                <div className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-[13px] leading-relaxed text-white shadow-[0_6px_20px_-8px_rgba(10,132,255,0.7)]">
+                  {t.raw}
+                </div>
+                <Reply result={isLive ? live : t.result!} state={isLive ? state : "done"} clips={clips} onNavigate={navigate} />
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="border-t border-hairline p-3">
+        {micError ? <p className="mb-2 px-1 text-xs text-danger">{micError}</p> : null}
+        <div className="flex items-end gap-2 rounded-xl border border-hairline-strong bg-black/30 p-1.5 transition-colors focus-within:border-accent/60">
+          <button
+            className={`grid size-9 shrink-0 place-items-center rounded-lg transition-colors ${
+              recording ? "bg-danger text-white" : "text-fg-2 hover:bg-white/8 hover:text-fg"
+            }`}
+            onClick={toggleMic}
+            disabled={transcribing || busy}
+            aria-label={recording ? "Stop recording" : "Record a voice brief"}
+            title="No Wispr Flow? Record here and Groq Whisper transcribes it."
+          >
+            {transcribing ? <span className="size-3.5 animate-spin rounded-full border-2 border-fg-3 border-t-transparent" /> : <MicIcon size={17} />}
+          </button>
+          <textarea
+            ref={area}
+            value={text}
+            onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            rows={1}
+            placeholder={recording ? `Listening… ${seconds}s, tap the mic to stop` : "Brief your editor…"}
+            className="scroll-thin max-h-42 min-h-9 flex-1 resize-none bg-transparent py-2 text-[14px] leading-snug outline-none placeholder:text-fg-3"
+            aria-label="Spoken brief"
+          />
+          <button
+            className="btn btn-primary size-9 shrink-0 rounded-lg p-0"
+            onClick={() => submit()}
+            disabled={!text.trim() || busy}
+            aria-label="Send brief"
+          >
+            {busy ? <span className="size-3.5 animate-spin rounded-full border-2 border-white/60 border-t-transparent" /> : <SendIcon size={17} />}
+          </button>
         </div>
-      ) : null}
+        <p className="mt-1.5 flex justify-between px-1 text-[10px] text-fg-3">
+          <span>Enter to send · Shift+Enter for a new line</span>
+          {text.length > MAX_CHARS * 0.85 ? <span className="tabular-nums text-warning">{text.length}/{MAX_CHARS}</span> : null}
+        </p>
+      </div>
     </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="pt-px text-fg-3">{label}</dt>
+      <dd className="min-w-0">{children}</dd>
+    </>
+  );
+}
+
+/** The editor's reply: only what it actually understood, then what it did and where to look. */
+function Reply({
+  result,
+  state,
+  clips,
+  onNavigate,
+}: {
+  result: Result;
+  state: BriefState;
+  clips: Clip[];
+  onNavigate: (target: BriefTarget, clipId?: string) => void;
+}) {
+  const { brief, clipId, clipTitle, summary, error } = result;
+  const titleOf = (id: string) => clips.find((c) => c.id === id)?.title;
+  const bubble = "w-fit max-w-[92%] rounded-2xl rounded-bl-md border border-hairline bg-white/[0.04] px-3.5 py-3 text-[13px]";
+
+  if (state === "parsing") {
+    return (
+      <div className={`${bubble} flex items-center gap-2 text-fg-2`}>
+        <span className="flex gap-1">
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="size-1.5 animate-bounce rounded-full bg-fg-3" style={{ animationDelay: `${i * 120}ms` }} />
+          ))}
+        </span>
+        Understanding your brief…
+      </div>
+    );
+  }
+  if (!brief) {
+    return error ? <div className={`${bubble} border-danger/30 bg-danger/10 text-danger`}>{error}</div> : null;
+  }
+
+  const platforms = brief.platforms.length ? PLATFORMS.filter((p) => brief.platforms.includes(p.id)) : brief.wantsCaptions ? PLATFORMS : [];
+  const writesCaptions = summary.some((s) => /caption/.test(s) && !/already match/.test(s));
+  const scheduled = summary.some((s) => /calendar/.test(s));
+  const learned = summary.some((s) => /rule|learning/.test(s));
+
+  return (
+    <div className={`${bubble} w-full`}>
+      <p className="label mb-2.5 flex items-center gap-1.5 text-accent">
+        <IconSparkle size={12} /> What I understood
+      </p>
+      <dl className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-x-3 gap-y-2 leading-snug">
+        {clipTitle ? (
+          <Row label="Clip">
+            <button className="text-left font-medium text-accent hover:underline" onClick={() => onNavigate("captions", clipId ?? undefined)}>
+              {clipTitle}
+            </button>
+          </Row>
+        ) : null}
+        {brief.topic ? <Row label="Topic">{brief.topic}</Row> : null}
+        {platforms.length ? (
+          <Row label="Platforms">
+            <span className="flex flex-wrap gap-1">
+              {platforms.map((p) => (
+                <span key={p.id} className="flex items-center gap-1 rounded-md bg-white/7 px-1.5 py-0.5 text-[11px]">
+                  <span className="size-1.5 rounded-full" style={{ background: p.color }} />
+                  {p.short}
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+        {brief.tone ? <Row label="Tone">{brief.tone}</Row> : null}
+        {brief.rules.length ? (
+          <Row label="New rules">
+            <span className="block space-y-1">
+              {brief.rules.map((r) => (
+                <span key={r} className="flex items-start gap-1.5">
+                  <IconCheck size={13} className="mt-0.5 shrink-0 text-success" />
+                  {r}
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+        {brief.schedule.length ? (
+          <Row label="Schedule">
+            <span className="block space-y-1 text-[12px]">
+              {brief.schedule.map((s, i) => (
+                <span key={i} className="flex items-start gap-1.5">
+                  {s.clipId ? <IconCheck size={13} className="mt-0.5 shrink-0 text-success" /> : <span className="shrink-0 text-warning">!</span>}
+                  <span>
+                    <span className="font-medium">
+                      {new Date(`${s.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      {s.time ? ` · ${s.time}` : ""}
+                    </span>{" "}
+                    {s.clipId ? (
+                      <>
+                        {titleOf(s.clipId)}
+                        {s.platforms.length ? ` · ${PLATFORMS.filter((p) => s.platforms.includes(p.id)).map((p) => p.short).join(", ")}` : ""}
+                      </>
+                    ) : (
+                      <span className="text-warning">no clip in this episode matches “{s.clipQuery}”</span>
+                    )}
+                  </span>
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+        {brief.feedback.length ? (
+          <Row label="Results">
+            <span className="block space-y-1 text-[12px]">
+              {brief.feedback.map((f, i) => (
+                <span key={i} className="flex items-start gap-1.5">
+                  <span className={`shrink-0 font-semibold ${f.outcome === "hit" ? "text-success" : f.outcome === "flop" ? "text-danger" : "text-fg-2"}`}>
+                    {f.outcome === "hit" ? "▲" : f.outcome === "flop" ? "▼" : "•"}
+                  </span>
+                  <span>
+                    {f.clipId ? (
+                      <>
+                        <span className="font-medium">{titleOf(f.clipId)}</span>: {f.metric || f.outcome}
+                        {f.platform ? ` on ${PLATFORMS.find((p) => p.id === f.platform)?.short}` : ""}
+                      </>
+                    ) : (
+                      <span className="text-warning">no clip in this episode matches “{f.clipQuery}”</span>
+                    )}
+                  </span>
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+        {brief.corrections.length ? (
+          <Row label="Corrected">
+            <span className="block space-y-0.5 text-[12px]">
+              {brief.corrections.map((c, i) => (
+                <span key={i} className="block">
+                  <span className="text-fg-3 line-through decoration-danger/70">{c.from}</span>
+                  <span className="mx-1.5 text-fg-3">→</span>
+                  {c.to}
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+        {brief.digressions?.length ? (
+          <Row label="Set aside">
+            <span className="block space-y-0.5 text-[12px] text-fg-3">
+              {brief.digressions.map((d) => (
+                <span key={d} className="block">
+                  “{d}”
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+        {brief.fillers.length ? (
+          <Row label="Ignored">
+            <span className="flex flex-wrap gap-1">
+              {brief.fillers.map((f) => (
+                <span key={f} className="rounded bg-white/5 px-1.5 py-px text-[11px] text-fg-3 line-through">
+                  {f}
+                </span>
+              ))}
+            </span>
+          </Row>
+        ) : null}
+      </dl>
+
+      <div className="mt-3 border-t border-hairline pt-2.5">
+        {state === "writing" ? (
+          <p className="flex items-center gap-2 text-[12px] text-accent">
+            <span className="size-1.5 animate-pulse rounded-full bg-accent" /> Writing captions…
+          </p>
+        ) : error ? (
+          <p className="text-[12px] text-danger">{error}</p>
+        ) : (
+          <>
+            <p className="text-[12px] text-success">{summary.join(" · ")}</p>
+            {writesCaptions || scheduled || learned ? (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {writesCaptions ? (
+                  <button className="btn btn-primary h-7 px-3 text-[11px]" onClick={() => onNavigate("captions", clipId ?? undefined)}>
+                    Review captions
+                  </button>
+                ) : null}
+                {scheduled ? (
+                  <button className="btn btn-secondary h-7 px-3 text-[11px]" onClick={() => onNavigate("calendar")}>
+                    Open calendar
+                  </button>
+                ) : null}
+                {learned ? (
+                  <button className="btn btn-secondary h-7 px-3 text-[11px]" onClick={() => onNavigate("brand")}>
+                    Brand memory
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
   );
 }

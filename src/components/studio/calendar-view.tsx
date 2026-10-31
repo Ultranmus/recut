@@ -5,20 +5,15 @@ import type { Learning } from "@/lib/brand-rules";
 import { addDays, isoDate, moveEntry, parseIso, schedule, startOfWeek, unschedule, type CalendarEntry } from "@/lib/calendar";
 import { googleCalendarUrl, toIcs } from "@/lib/calendar-export";
 import { download } from "@/lib/format";
-import { PLATFORMS, type Clip, type PlatformId, type Project } from "@/lib/types";
+import { PLATFORMS, type Clip, type Project } from "@/lib/types";
 import { IconChevronLeft, IconClose } from "../icons";
+import { formatTime, ScheduleDialog } from "./schedule-dialog";
 
 export function outcomeBadge(l: Learning) {
   const views = l.views ? (l.views >= 1000 ? `${Math.round(l.views / 100) / 10}K`.replace(".0K", "K") : String(l.views)) : null;
   if (l.outcome === "hit") return { text: `▲ ${views ?? "Hit"}`, cls: "bg-success/15 text-success" };
   if (l.outcome === "flop") return { text: `▼ ${views ?? "Flop"}`, cls: "bg-danger/15 text-danger" };
   return { text: views ?? "Average", cls: "bg-white/8 text-fg-2" };
-}
-
-function formatTime(t: string) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 export function CalendarView({
@@ -60,10 +55,13 @@ export function CalendarView({
         <div>
           <h2 className="text-[15px] font-semibold tracking-tight">This week&apos;s posts</h2>
           <p className="text-xs text-fg-3">
-            Say “post the Gateway clip on Tuesday” above, or add one here. Drag a post to move it.
+            Add a post, drag one to another day, or tell the studio chat &ldquo;post the Gateway clip on Tuesday&rdquo;.
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <button className="btn btn-primary h-8 px-3 text-xs max-sm:w-full" onClick={() => setAdding(isoDate(new Date()))} disabled={!clips.length}>
+            + Schedule a post
+          </button>
           <button
             className="btn btn-secondary order-last h-8 px-3 text-xs max-sm:w-full sm:order-none"
             disabled={!inWeek.length}
@@ -112,7 +110,7 @@ export function CalendarView({
                 const id = e.dataTransfer.getData("text/entry");
                 if (id) moveEntry(id, iso);
               }}
-              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:min-h-24 lg:min-h-40 ${
+              className={`flex flex-col gap-2 bg-[#121215] p-2.5 transition-colors max-lg:min-h-24 lg:min-h-40 lg:pb-16 ${
                 past && !dayEntries.length ? "max-lg:hidden" : ""
               } ${dragOver === iso ? "bg-accent/10" : ""} ${
                 past ? "opacity-70" : ""
@@ -210,31 +208,11 @@ export function CalendarView({
                 );
               })}
 
-              {adding === iso ? (
-                <AddForm
-                  clips={clips}
-                  onCancel={() => setAdding(null)}
-                  onAdd={(clip, platforms, time) => {
-                    schedule([
-                      {
-                        projectId: project.id,
-                        projectName: project.name,
-                        clipId: clip.id,
-                        clipTitle: clip.title,
-                        hook: clip.hook,
-                        platforms,
-                        date: iso,
-                        time,
-                        source: "manual",
-                      },
-                    ]);
-                    setAdding(null);
-                  }}
-                />
-              ) : (
+              {past ? null : (
                 <button
-                  className="mt-auto rounded-lg border border-dashed border-transparent py-1.5 text-[11px] text-fg-3 transition-colors hover:border-white/15 hover:text-fg-2"
+                  className="mt-auto rounded-lg border border-dashed border-white/10 py-1.5 text-[11px] text-fg-3 transition-colors hover:border-accent/50 hover:bg-accent/5 hover:text-fg"
                   onClick={() => setAdding(iso)}
+                  aria-label={`Schedule a post on ${d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`}
                 >
                   + Add
                 </button>
@@ -243,57 +221,32 @@ export function CalendarView({
           );
         })}
       </div>
-    </section>
-  );
-}
 
-function AddForm({
-  clips,
-  onAdd,
-  onCancel,
-}: {
-  clips: Clip[];
-  onAdd: (clip: Clip, platforms: PlatformId[], time: string) => void;
-  onCancel: () => void;
-}) {
-  const [clipId, setClipId] = useState(clips[0]?.id ?? "");
-  const [platforms, setPlatforms] = useState<PlatformId[]>([]);
-  const [time, setTime] = useState("");
-  const clip = clips.find((c) => c.id === clipId);
-  return (
-    <div className="rise space-y-2 rounded-xl border border-accent/40 bg-black/30 p-2">
-      <select className="field h-8 px-2 text-xs" value={clipId} onChange={(e) => setClipId(e.target.value)} aria-label="Clip">
-        {clips.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.title}
-          </option>
-        ))}
-      </select>
-      <div className="flex flex-wrap gap-1">
-        {PLATFORMS.map((p) => {
-          const on = platforms.includes(p.id);
-          return (
-            <button
-              key={p.id}
-              onClick={() => setPlatforms(on ? platforms.filter((x) => x !== p.id) : [...platforms, p.id])}
-              className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${on ? "bg-white/15 text-fg" : "bg-white/5 text-fg-3"}`}
-              aria-pressed={on}
-            >
-              {p.short}
-            </button>
-          );
-        })}
-      </div>
-      <input type="time" className="field h-8 px-2 text-xs" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Time" />
-      <div className="flex gap-1">
-        <button className="btn btn-ghost h-7 flex-1 px-2 text-[11px]" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="btn btn-primary h-7 flex-1 px-2 text-[11px]" disabled={!clip} onClick={() => clip && onAdd(clip, platforms, time)}>
-          Add
-        </button>
-      </div>
-    </div>
+      {adding ? (
+        <ScheduleDialog
+          clips={clips}
+          date={adding}
+          onClose={() => setAdding(null)}
+          onSchedule={({ clip, date, time, platforms }) => {
+            schedule([
+              {
+                projectId: project.id,
+                projectName: project.name,
+                clipId: clip.id,
+                clipTitle: clip.title,
+                hook: clip.hook,
+                platforms,
+                date,
+                time,
+                source: "manual",
+              },
+            ]);
+            setAdding(null);
+            onWeekChange(startOfWeek(parseIso(date)));
+          }}
+        />
+      ) : null}
+    </section>
   );
 }
 

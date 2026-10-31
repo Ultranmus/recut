@@ -30,3 +30,42 @@ export function diffWords(before: string, after: string): DiffPart[] {
   while (j < m) push(b[j++], "added");
   return out;
 }
+
+/**
+ * Makes a word diff readable: unchanged runs that are only spaces or one short word between two
+ * edits are folded into the edit, so a rewritten phrase shows as one removed run then one added run
+ * instead of alternating word by word.
+ */
+export function groupDiff(parts: DiffPart[]): DiffPart[] {
+  const out: DiffPart[] = [];
+  let removed = "";
+  let added = "";
+  const flush = () => {
+    if (removed) out.push({ text: removed, type: "removed" });
+    if (added) out.push({ text: added, type: "added" });
+    removed = added = "";
+  };
+  parts.forEach((p, i) => {
+    if (p.type === "removed") removed += p.text;
+    else if (p.type === "added") added += p.text;
+    else {
+      const between = (removed || added) && i < parts.length - 1 && parts[i + 1].type !== "same";
+      if (between && /^\s*\S{0,3}\s*$/.test(p.text)) {
+        removed += p.text;
+        added += p.text;
+      } else {
+        flush();
+        out.push(p);
+      }
+    }
+  });
+  flush();
+  return out;
+}
+
+/** Share of the new text that was kept from the old one, from 0 (all new) to 1 (unchanged). */
+export function keptShare(parts: DiffPart[]) {
+  const kept = parts.filter((p) => p.type === "same").reduce((n, p) => n + p.text.trim().length, 0);
+  const total = parts.filter((p) => p.type !== "removed").reduce((n, p) => n + p.text.trim().length, 0);
+  return total ? kept / total : 1;
+}

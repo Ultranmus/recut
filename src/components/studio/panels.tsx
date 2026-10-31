@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { duration, timecode } from "@/lib/format";
-import { diffWords } from "@/lib/diff";
+import { diffWords, groupDiff, keptShare } from "@/lib/diff";
 import { PLATFORMS, type Clip, type PlatformId, type Segment, type Word } from "@/lib/types";
 import { IconCheck, IconCopy, IconScissors, IconSparkle } from "../icons";
 
@@ -164,48 +164,85 @@ function AutoTextarea({
 
 export type PendingChange = { before: string; after: string; reason: string; source: "brief" | "rule" };
 
-function BeforeAfter({ change, onAccept, onReject }: { change: PendingChange; onAccept: () => void; onReject: () => void }) {
-  const parts = diffWords(change.before, change.after);
+/**
+ * A suggested rewrite, shown in place of the caption until the creator decides. "Changes" marks
+ * removed words in red and added words in green in one passage; the other views show each version clean.
+ */
+function Suggestion({ change, onAccept, onReject }: { change: PendingChange; onAccept: () => void; onReject: () => void }) {
+  const raw = diffWords(change.before, change.after);
+  const parts = groupDiff(raw);
+  // A caption that was mostly rewritten reads better clean than as a sea of red and green.
+  const rewritten = keptShare(raw) < 0.4;
+  const [view, setView] = useState<"changes" | "suggested" | "current">(rewritten ? "suggested" : "changes");
   return (
-    <div className="rise mb-2.5 overflow-hidden rounded-lg border border-accent/30 bg-accent/[0.06]">
-      <div className="flex items-center justify-between gap-2 border-b border-accent/20 px-3 py-1.5">
-        <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-accent">
-          <IconSparkle size={12} className="shrink-0" />
-          <span className="truncate">{change.source === "brief" ? "From your brief" : "Brand rule"} · {change.reason}</span>
-        </span>
+    <div className="rise overflow-hidden rounded-xl border border-accent/40 bg-accent/[0.05] shadow-[0_10px_30px_-14px_rgba(10,132,255,0.55)]">
+      <div className="space-y-1 px-3 pb-2.5 pt-3">
+        <p className="flex items-center gap-2 text-[12px] font-semibold text-accent">
+          <IconSparkle size={13} className="shrink-0" />
+          Suggested rewrite
+          <span className="rounded-full bg-accent/15 px-2 py-px text-[10px] font-medium">
+            {change.source === "brief" ? "From your brief" : "Brand rule"}
+          </span>
+        </p>
+        {change.reason ? <p className="text-[12px] leading-relaxed text-fg-2">{change.reason}</p> : null}
+        {rewritten ? <p className="text-[11px] text-fg-3">Mostly rewritten, so it opens on the new version. Compare with Current.</p> : null}
       </div>
-      <div className="grid gap-px bg-white/5 text-[12px] leading-relaxed">
-        <div className="bg-[#16161a] px-3 py-2">
-          <p className="label mb-1 text-[9px]">Before</p>
-          <p className="whitespace-pre-wrap">
-            {parts.map((d, i) =>
-              d.type === "added" ? null : (
-                <span key={i} className={d.type === "removed" ? "rounded-sm bg-danger/15 text-danger line-through decoration-danger/60" : "text-fg-3"}>
-                  {d.text}
-                </span>
-              )
-            )}
-          </p>
-        </div>
-        <div className="bg-[#16161a] px-3 py-2">
-          <p className="label mb-1 text-[9px]">After</p>
-          <p className="whitespace-pre-wrap">
-            {parts.map((d, i) =>
-              d.type === "removed" ? null : (
-                <span key={i} className={d.type === "added" ? "rounded-sm bg-success/15 text-success" : "text-fg-2"}>
-                  {d.text}
-                </span>
-              )
-            )}
-          </p>
+
+      <div className="px-3">
+        <div className="segmented w-full" role="tablist" aria-label="Suggestion view">
+          {(
+            [
+              ["changes", "Changes"],
+              ["suggested", "Suggested"],
+              ["current", "Current"],
+            ] as const
+          ).map(([v, label]) => (
+            <button key={v} role="tab" aria-selected={view === v} data-active={view === v} onClick={() => setView(v)} className="flex-1">
+              {label}
+            </button>
+          ))}
         </div>
       </div>
-      <div className="flex justify-end gap-1.5 px-2 py-1.5">
-        <button className="btn btn-ghost h-7 px-2.5 text-[11px]" onClick={onReject}>
-          Keep original
+
+      <div className="m-3 rounded-lg bg-black/30 px-3 py-2.5 text-[13px] leading-relaxed">
+        <p className="whitespace-pre-wrap">
+          {view === "changes"
+            ? parts.map((d, i) => (
+                <span
+                  key={i}
+                  className={
+                    d.type === "added"
+                      ? "rounded-sm bg-success/20 text-success"
+                      : d.type === "removed"
+                        ? "rounded-sm bg-danger/15 text-danger/90 line-through decoration-danger/70"
+                        : "text-fg-2"
+                  }
+                >
+                  {d.text}
+                </span>
+              ))
+            : view === "suggested"
+              ? change.after
+              : <span className="text-fg-2">{change.before}</span>}
+        </p>
+        {view === "changes" ? (
+          <p className="mt-2.5 flex gap-3 border-t border-hairline pt-2 text-[10px] text-fg-3">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-sm bg-danger/60" /> Removed
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-sm bg-success/70" /> Added
+            </span>
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex gap-2 border-t border-accent/20 bg-black/10 px-3 py-2.5">
+        <button className="btn btn-secondary h-8 flex-1 text-xs" onClick={onReject}>
+          Keep current
         </button>
-        <button className="btn btn-primary h-7 px-2.5 text-[11px]" onClick={onAccept}>
-          Accept
+        <button className="btn btn-primary h-8 flex-1 text-xs" onClick={onAccept}>
+          <IconCheck size={13} /> Use suggestion
         </button>
       </div>
     </div>
@@ -238,9 +275,12 @@ export function CaptionPanel({
   return (
     <div className="space-y-3">
       {pendingCount ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2">
-          <span className="text-xs">
-            {pendingCount} suggested change{pendingCount === 1 ? "" : "s"} below
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2.5">
+          <span className="text-xs leading-snug">
+            <span className="font-semibold text-fg">
+              {pendingCount} suggested rewrite{pendingCount === 1 ? "" : "s"}
+            </span>
+            <span className="block text-fg-2">Review each one below, or accept them all.</span>
           </span>
           <button className="btn btn-primary h-7 px-2.5 text-[11px]" onClick={onAcceptAll}>
             Accept all
@@ -276,14 +316,15 @@ export function CaptionPanel({
               </button>
             </div>
             {pending[p.id] ? (
-              <BeforeAfter change={pending[p.id]!} onAccept={() => onAccept(p.id)} onReject={() => onReject(p.id)} />
-            ) : null}
-            <AutoTextarea
-              value={text}
-              label={`${p.name} caption`}
-              onChange={(v) => onChange({ ...clip, captions: { ...clip.captions, [p.id]: v } })}
-              onCommit={(before, after) => onCommitEdit(p.id, before, after)}
-            />
+              <Suggestion change={pending[p.id]!} onAccept={() => onAccept(p.id)} onReject={() => onReject(p.id)} />
+            ) : (
+              <AutoTextarea
+                value={text}
+                label={`${p.name} caption`}
+                onChange={(v) => onChange({ ...clip, captions: { ...clip.captions, [p.id]: v } })}
+                onCommit={(before, after) => onCommitEdit(p.id, before, after)}
+              />
+            )}
             {learning === p.id ? (
               <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent-3">
                 <span className="size-1.5 animate-pulse rounded-full bg-accent-3" /> Learning from your edit…
@@ -328,7 +369,19 @@ export function CaptionPanel({
 }
 
 /** Start/end, editable hook line and the AI's reason for picking this moment. */
-export function ClipDetails({ clip, rank, onChange }: { clip: Clip; rank: number; onChange: (c: Clip) => void }) {
+export function ClipDetails({
+  clip,
+  rank,
+  scheduled,
+  onChange,
+  onSchedule,
+}: {
+  clip: Clip;
+  rank: number;
+  scheduled?: string;
+  onChange: (c: Clip) => void;
+  onSchedule: () => void;
+}) {
   return (
     <div className="mx-auto w-full max-w-[560px] rounded-2xl border border-hairline bg-white/[0.03] p-4">
       <div className="flex items-start gap-3">
@@ -373,6 +426,16 @@ export function ClipDetails({ clip, rank, onChange }: { clip: Clip; rank: number
               </p>
             </div>
           ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
+            <button className="btn btn-secondary h-8 gap-1.5 px-3 text-xs" onClick={onSchedule}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                <path d="M3.5 10h17M8 3v4M16 3v4M12 13.5v4M10 15.5h4" />
+              </svg>
+              Schedule post
+            </button>
+            {scheduled ? <span className="text-[11px] text-fg-3">On the calendar: {scheduled}</span> : null}
+          </div>
         </div>
       </div>
     </div>
@@ -441,53 +504,45 @@ export function TranscriptPanel({
   onSeek: (t: number) => void;
   onSelectSegment: (s: Segment) => void;
 }) {
-  const activeRef = useRef<HTMLDivElement>(null);
+  const markerRef = useRef<HTMLDivElement>(null);
+  const opened = useRef(false);
   const firstInClip = segments.findIndex((s) => s.end > clip.start);
 
   useEffect(() => {
-    // Scroll only the inspector column; scrollIntoView would also scroll the page.
-    const el = activeRef.current;
+    // Put the clip's first line at the top of the inspector, so the clip fills the view. Opening the
+    // tab jumps there instantly; switching clips while it's open glides. Only the column scrolls.
+    const el = markerRef.current;
     const box = el?.closest<HTMLElement>("[data-scroll]");
     if (!el || !box) return;
-    const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
-    box.scrollTo({ top: top - box.clientHeight / 3, behavior: "smooth" });
+    const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 12;
+    box.scrollTo({ top, behavior: opened.current ? "smooth" : "instant" });
+    opened.current = true;
   }, [clip.id]);
 
   return (
-    <div className="space-y-5">
-      <section>
-        <h3 className="label mb-2">In this clip</h3>
-        <p className="text-[15px] leading-[1.75]">
-          {words.map((w, i) => {
-            const active = time >= w.start && time < w.end + 0.05;
-            const spoken = time >= w.start;
-            return (
-              <span key={i}>
-                <button
-                  onClick={() => onSeek(w.start)}
-                  className={`rounded px-0.5 transition-colors duration-150 ${
-                    active ? "bg-accent text-white" : spoken ? "text-fg" : "text-fg-3 hover:text-fg-2"
-                  }`}
-                >
-                  {w.word}
-                </button>{" "}
-              </span>
-            );
-          })}
-        </p>
-      </section>
-
-      <section>
-        <h3 className="label mb-2">Full episode</h3>
-        <div className="space-y-0.5">
-          {segments.map((s, i) => {
-            const inClip = s.start < clip.end && s.end > clip.start;
-            return (
+    <div>
+      <p className="mb-3 text-[11px] text-fg-3">Click a time to jump there or start a custom clip. Click a word in the clip to play from it.</p>
+      <div>
+        {segments.map((s, i) => {
+          const inClip = s.start < clip.end && s.end > clip.start;
+          const prevIn = i > 0 && segments[i - 1].start < clip.end && segments[i - 1].end > clip.start;
+          const nextIn = i < segments.length - 1 && segments[i + 1].start < clip.end && segments[i + 1].end > clip.start;
+          return (
+            <div key={s.id}>
+              {i === firstInClip ? (
+                <div ref={markerRef} className="mb-1 mt-2 flex items-center gap-2 px-2">
+                  <span className="label text-accent">This clip</span>
+                  <span className="font-mono text-[11px] text-fg-3 tabular-nums">
+                    {timecode(clip.start)} → {timecode(clip.end)}
+                  </span>
+                  <span className="h-px flex-1 bg-accent/25" />
+                </div>
+              ) : null}
               <div
-                key={s.id}
-                ref={i === firstInClip ? activeRef : undefined}
-                className={`group flex gap-3 rounded-lg px-2 py-1.5 text-[13px] leading-relaxed transition-colors ${
-                  inClip ? "bg-accent/10 text-fg" : "text-fg-2 hover:bg-hover"
+                className={`flex gap-3 px-2 py-1.5 leading-relaxed transition-colors ${
+                  inClip
+                    ? `bg-accent/[0.08] text-[14px] ${prevIn ? "" : "rounded-t-lg"} ${nextIn ? "" : "rounded-b-lg"}`
+                    : "rounded-lg text-[13px] text-fg-2 hover:bg-hover"
                 }`}
               >
                 <button
@@ -497,12 +552,35 @@ export function TranscriptPanel({
                 >
                   {timecode(s.start)}
                 </button>
-                <span>{s.text}</span>
+                {inClip ? (
+                  <span>
+                    {words
+                      .filter((w) => w.start >= s.start - 0.05 && w.start < s.end)
+                      .map((w, j) => {
+                        const outside = w.end <= clip.start || w.start >= clip.end;
+                        const active = time >= w.start && time < w.end + 0.05;
+                        return (
+                          <span key={j}>
+                            <button
+                              onClick={() => onSeek(w.start)}
+                              className={`rounded px-px transition-colors duration-150 ${
+                                outside ? "text-fg-3" : active ? "bg-accent text-white" : time >= w.start ? "text-fg" : "text-fg-2 hover:text-fg"
+                              }`}
+                            >
+                              {w.word}
+                            </button>{" "}
+                          </span>
+                        );
+                      })}
+                  </span>
+                ) : (
+                  <span>{s.text}</span>
+                )}
               </div>
-            );
-          })}
-        </div>
-      </section>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

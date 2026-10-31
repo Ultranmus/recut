@@ -18,7 +18,8 @@ import { ClipPreview, type PlayerHandle } from "./clip-preview";
 import { BrandMemoryPanel } from "./brand-memory-panel";
 import { CalendarView, outcomeBadge } from "./calendar-view";
 import { CaptionPanel, ClipDetails, ClipList, EpisodeTimeline, TranscriptPanel, type ClipBadges, type PendingChange } from "./panels";
-import { TalkToStudio, type BriefState } from "./talk-box";
+import { ScheduleDialog } from "./schedule-dialog";
+import { sendBrief, TalkToStudio, type BriefState } from "./talk-box";
 
 const ALL_PLATFORMS = PLATFORMS.map((p) => p.id);
 type Tab = "captions" | "brand" | "transcript";
@@ -49,6 +50,7 @@ export function Studio({ id }: { id: string }) {
   const [briefState, setBriefState] = useState<BriefState>("idle");
   const [briefError, setBriefError] = useState<string | null>(null);
   const [briefClipId, setBriefClipId] = useState<string | null>(null);
+  const [scheduling, setScheduling] = useState<string | null>(null);
   /** Suggested caption changes awaiting review, keyed by clip id then platform. */
   const [pending, setPending] = useState<Record<string, Partial<Record<PlatformId, PendingChange>>>>({});
   const [learning, setLearning] = useState<PlatformId | null>(null);
@@ -126,6 +128,8 @@ export function Studio({ id }: { id: string }) {
     }
   }
 
+  const scheduledLabel = (clipId: string) => badges[clipId]?.scheduled?.replace("📅 ", "");
+
   function updateClip(next: Clip) {
     setClips((cs) => cs.map((c) => (c.id === next.id ? next : c)));
   }
@@ -192,6 +196,7 @@ export function Studio({ id }: { id: string }) {
     if (!clip || !project) return;
     setBriefError(null);
     setSummary([]);
+    setBriefClipId(null);
     setBriefState("parsing");
     try {
       const b = await briefAI(
@@ -446,22 +451,7 @@ export function Studio({ id }: { id: string }) {
         <div className="border-b border-warning/20 bg-warning/10 px-5 py-2 text-center text-xs text-warning">{project.notice}</div>
       ) : null}
 
-      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:p-4 xl:min-h-0 xl:overflow-hidden">
-      <TalkToStudio
-        state={briefState}
-        error={briefError}
-        brief={brief}
-        clips={clips}
-        targetClip={clips.find((c) => c.id === briefClipId) ?? null}
-        summary={summary}
-        onSubmit={runBrief}
-        onClear={() => {
-          setBrief(null);
-          setSummary([]);
-          setBriefError(null);
-          setBriefState("idle");
-        }}
-      />
+      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 pb-20 sm:p-4 sm:pb-20 xl:min-h-0 xl:overflow-hidden xl:pb-4">
       {view === "calendar" ? (
         <CalendarView
           project={project}
@@ -476,7 +466,7 @@ export function Studio({ id }: { id: string }) {
             setSelectedId(id);
             setView("studio");
           }}
-          onFeedback={(_, sentence) => void runBrief(sentence)}
+          onFeedback={(_, sentence) => sendBrief(sentence)}
         />
       ) : (
       <main className="grid flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:min-h-0 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
@@ -514,7 +504,7 @@ export function Studio({ id }: { id: string }) {
             <h2 className="label">Clips</h2>
             <span className="text-[11px] text-fg-3">{clips.length} moments · ranked</span>
           </div>
-          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 max-lg:max-h-96 lg:max-xl:max-h-[46rem]">
+          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-16 max-lg:max-h-96 lg:max-xl:max-h-[46rem]">
             <ClipList clips={clips} selectedId={clip?.id ?? ""} onSelect={setSelectedId} badges={badges} />
             <p className="mt-3 flex items-center gap-1.5 px-2 text-[11px] text-fg-3">
               <IconScissors size={12} /> Make your own from any line in Transcript.
@@ -526,7 +516,13 @@ export function Studio({ id }: { id: string }) {
         <section className="glass flex min-h-0 flex-col rounded-2xl px-3 py-5 scroll-thin sm:px-4 sm:py-6 xl:overflow-y-auto xl:overscroll-contain">
           {clip && mediaUrl ? (
             <div className="flex flex-col gap-5">
-              <ClipDetails clip={clip} rank={clip.score ? clips.indexOf(clip) + 1 : 0} onChange={updateClip} />
+              <ClipDetails
+                clip={clip}
+                rank={clip.score ? clips.indexOf(clip) + 1 : 0}
+                scheduled={scheduledLabel(clip.id)}
+                onChange={updateClip}
+                onSchedule={() => setScheduling(clip.id)}
+              />
               <ClipPreview
                 project={project}
                 mediaUrl={mediaUrl}
@@ -552,8 +548,8 @@ export function Studio({ id }: { id: string }) {
 
         {/* Right: inspector */}
         <aside className="glass flex min-h-0 flex-col overflow-hidden rounded-2xl lg:col-span-2 xl:col-span-1">
-          <div className="border-b border-hairline p-3">
-            <div className="segmented w-full" role="tablist">
+          <div className="border-b border-hairline px-3 py-3">
+            <div className="segmented w-full gap-1 p-1" role="tablist" aria-label="Inspector">
               {(
                 [
                   ["captions", "Captions"],
@@ -565,13 +561,13 @@ export function Studio({ id }: { id: string }) {
                   key={t}
                   data-active={tab === t}
                   onClick={() => setTab(t)}
-                  className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-1.5"
+                  className="flex h-8 flex-1 items-center justify-center gap-2 whitespace-nowrap px-3 text-[13px]"
                   role="tab"
                   aria-selected={tab === t}
                 >
                   {label}
                   {t === "brand" && rules.length + learnings.length ? (
-                    <span className="grid h-4 min-w-4 place-items-center rounded-full bg-accent-3/80 px-1 text-[10px] font-semibold text-white">
+                    <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent-3/85 px-1.5 text-[10px] font-semibold tabular-nums text-white">
                       {rules.length + learnings.length}
                     </span>
                   ) : null}
@@ -609,7 +605,7 @@ export function Studio({ id }: { id: string }) {
               ) : (
                 <TranscriptPanel
                   clip={clip}
-                  words={clipWords}
+                  words={project.transcript.words}
                   segments={project.transcript.segments}
                   time={time}
                   onSeek={(t) => player.current?.seek(t)}
@@ -622,6 +618,49 @@ export function Studio({ id }: { id: string }) {
       </main>
       )}
       </div>
+
+      <TalkToStudio
+        state={briefState}
+        error={briefError}
+        brief={brief}
+        clips={clips}
+        targetClip={clips.find((c) => c.id === briefClipId) ?? null}
+        summary={summary}
+        onSubmit={runBrief}
+        onNavigate={(target, id) => {
+          if (id) setSelectedId(id);
+          // The brief already moved the calendar to the week it scheduled into.
+          if (target === "calendar") setView("calendar");
+          else {
+            setView("studio");
+            setTab(target);
+          }
+        }}
+        onClear={() => {
+          setBrief(null);
+          setSummary([]);
+          setBriefError(null);
+          setBriefState("idle");
+        }}
+      />
+
+      {scheduling && project ? (
+        <ScheduleDialog
+          clips={clips}
+          clipId={scheduling}
+          onClose={() => setScheduling(null)}
+          onSchedule={({ clip: c, date, time, platforms }) => {
+            const [entry] = schedule([
+              { projectId: project.id, projectName: project.name, clipId: c.id, clipTitle: c.title, hook: c.hook, platforms, date, time, source: "manual" },
+            ]);
+            setScheduling(null);
+            setHighlight([entry.id]);
+            setTimeout(() => setHighlight([]), 6000);
+            setWeekStart(startOfWeek(parseIso(date)));
+            setToast(`Scheduled “${c.title}” for ${parseIso(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}. See it in Calendar.`);
+          }}
+        />
+      ) : null}
 
       {toast ? (
         <div

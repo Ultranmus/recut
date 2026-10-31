@@ -204,6 +204,11 @@ textarea.field:focus {
     background-color 200ms var(--ease-mac);
 }
 
+.segmented > button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
 .segmented > button[data-active="true"] {
   color: var(--text);
   background: rgba(255, 255, 255, 0.14);
