@@ -512,16 +512,16 @@ export function ClipPreview({
             <div className="mt-4 space-y-2.5 rounded-xl border border-hairline bg-white/[0.02] p-3">
               <p className="label">Captions</p>
               <OptionRow label="Style">
-                <div className="segmented" role="radiogroup" aria-label="Caption style">
+                <div className="segmented w-full" role="radiogroup" aria-label="Caption style">
                   {CAPTION_STYLES.map((s) => (
-                    <button key={s.id} data-active={style === s.id} onClick={() => setStyle(s.id)} role="radio" aria-checked={style === s.id}>
+                    <button key={s.id} className="flex-1" data-active={style === s.id} onClick={() => setStyle(s.id)} role="radio" aria-checked={style === s.id}>
                       {s.name}
                     </button>
                   ))}
                 </div>
               </OptionRow>
               <OptionRow label="Size">
-                <div className="segmented" role="radiogroup" aria-label="Caption size">
+                <div className="segmented w-full" role="radiogroup" aria-label="Caption size">
                   {(
                     [
                       ["s", "Small"],
@@ -529,14 +529,14 @@ export function ClipPreview({
                       ["l", "Large"],
                     ] as const
                   ).map(([v, label]) => (
-                    <button key={v} data-active={capOpts.size === v} onClick={() => setCapOpts((o) => ({ ...o, size: v }))} role="radio" aria-checked={capOpts.size === v}>
+                    <button key={v} className="flex-1" data-active={capOpts.size === v} onClick={() => setCapOpts((o) => ({ ...o, size: v }))} role="radio" aria-checked={capOpts.size === v}>
                       {label}
                     </button>
                   ))}
                 </div>
               </OptionRow>
               <OptionRow label="Position">
-                <div className="segmented" role="radiogroup" aria-label="Caption position">
+                <div className="segmented w-full" role="radiogroup" aria-label="Caption position">
                   {(
                     [
                       ["top", "Top"],
@@ -546,6 +546,7 @@ export function ClipPreview({
                   ).map(([v, label]) => (
                     <button
                       key={v}
+                      className="flex-1"
                       data-active={capOpts.position === v}
                       onClick={() => setCapOpts((o) => ({ ...o, position: v }))}
                       role="radio"
@@ -557,7 +558,7 @@ export function ClipPreview({
                 </div>
               </OptionRow>
               <OptionRow label="Text">
-                <div className="flex gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   {(
                     [
                       ["caps", "ALL CAPS"],
@@ -570,7 +571,7 @@ export function ClipPreview({
                       onClick={() => setCapOpts((o) => ({ ...o, [k]: !o[k] }))}
                       disabled={k === "caps" && style === "pop"}
                       title={k === "caps" && style === "pop" ? "Pop is always in capitals" : undefined}
-                      className={`h-7 rounded-md border px-2.5 text-[11px] font-medium transition-colors disabled:opacity-40 ${
+                      className={`h-8 rounded-[0.6rem] border px-2 text-[0.78rem] font-medium transition-colors disabled:opacity-40 ${
                         capOpts[k] || (k === "caps" && style === "pop")
                           ? "border-accent bg-accent/15 text-fg"
                           : "border-hairline text-fg-2 hover:border-hairline-strong hover:text-fg"
@@ -706,9 +707,10 @@ function EqBars() {
   );
 }
 
+/** One caption setting: a fixed label column, then a control that fills the rest, so rows line up. */
 function OptionRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-3">
       <span className="text-[11px] text-fg-3">{label}</span>
       {children}
     </div>
