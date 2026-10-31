@@ -27,7 +27,14 @@ type Graph = {
   freq: Uint8Array<ArrayBuffer>;
 };
 
-export type PlayerHandle = { seek: (t: number) => void; play: () => void };
+export type PlayerHandle = {
+  seek: (t: number) => void;
+  play: () => void;
+  /** For the studio chat: switch preview, restyle 9:16 captions, start an export. */
+  setView: (v: "original" | "social") => void;
+  setLook: (look: { style?: CaptionStyle; options?: Partial<CaptionOptions> }) => void;
+  exportVideo: () => void;
+};
 
 const ACCENTS = ["#0a84ff", "#bf5af2", "#30d158", "#ff375f", "#ff9f0a"];
 
@@ -204,8 +211,23 @@ export function ClipPreview({
     m.currentTime = Math.min(clip.end - 0.05, Math.max(clip.start, t));
   }
 
+  // Refreshed after every render on purpose; the setters inside only run later, when the chat asks.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    playerRef.current = { seek, play };
+    playerRef.current = {
+      seek,
+      play,
+      setView,
+      setLook: ({ style: st, options }) => {
+        if (st) setStyle(st);
+        if (options) setCapOpts((o) => ({ ...o, ...options }));
+      },
+      exportVideo: () => {
+        setView("social");
+        // Let the 9:16 canvas mount before recording starts.
+        setTimeout(() => void exportVideo(), 150);
+      },
+    };
   });
 
   useEffect(() => {

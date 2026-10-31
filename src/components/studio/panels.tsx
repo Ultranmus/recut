@@ -163,6 +163,8 @@ function AutoTextarea({
   );
 }
 
+export const OPEN_PREVIEW = "recut:open-preview";
+
 export type PendingChange = { before: string; after: string; reason: string; source: "brief" | "rule" };
 
 /**
@@ -273,6 +275,12 @@ export function CaptionPanel({
 }) {
   const { copied, copy } = useCopy();
   const [previewing, setPreviewing] = useState<PlatformId | null>(null);
+  // The studio chat can open a platform preview ("show me how it looks on LinkedIn").
+  useEffect(() => {
+    const open = (e: Event) => setPreviewing((e as CustomEvent<PlatformId>).detail);
+    window.addEventListener(OPEN_PREVIEW, open);
+    return () => window.removeEventListener(OPEN_PREVIEW, open);
+  }, []);
   const pendingCount = Object.keys(pending).length;
   const all = PLATFORMS.map((p) => `${p.name}\n${clip.captions[p.id] ?? ""}`).join("\n\n");
 
@@ -305,12 +313,12 @@ export function CaptionPanel({
         const folded = p.visible < p.limit && text.length > p.visible;
         return (
           <section key={p.id} className="rounded-xl border border-hairline bg-white/[0.025] p-3 transition-colors focus-within:border-accent/40 focus-within:bg-white/[0.04]">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex min-w-0 items-center gap-2 text-[13px] font-medium">
                 <span className="size-2 shrink-0 rounded-full" style={{ background: p.color }} />
-                <span className="text-[13px] font-medium">{p.name}</span>
-              </div>
-              <span className="flex shrink-0 items-center">
+                {p.name}
+              </p>
+              <span className="-mr-1 flex shrink-0 items-center">
               <button
                 className="btn btn-ghost h-7 gap-1.5 px-2 text-[11px] text-accent hover:text-accent"
                 onClick={() => setPreviewing(p.id)}
@@ -328,6 +336,7 @@ export function CaptionPanel({
               </button>
               </span>
             </div>
+            <p className="mb-2.5 mt-0.5 pl-4 text-[11px] leading-snug text-fg-3">{p.tone}</p>
             {pending[p.id] ? (
               <Suggestion change={pending[p.id]!} onAccept={() => onAccept(p.id)} onReject={() => onReject(p.id)} />
             ) : (
@@ -343,14 +352,16 @@ export function CaptionPanel({
                 <span className="size-1.5 animate-pulse rounded-full bg-accent-3" /> Learning from your edit…
               </p>
             ) : null}
-            <div className="mt-1.5 flex items-start justify-between gap-3 text-[11px] leading-snug">
-              <span className="min-w-0 text-fg-3">{p.tone}</span>
-              <span
-                className={`shrink-0 font-mono tabular-nums ${over ? "text-danger" : "text-fg-3"}`}
-                title={folded ? `Feeds show about the first ${p.visible} characters before truncating` : undefined}
-              >
-                {folded ? <span className="mr-1.5 text-warning/80">“more” at {p.visible}</span> : null}
-                {text.length}/{p.limit}
+            <div className="mt-2 flex items-center justify-between gap-3 text-[11px]">
+              <span className="min-w-0 truncate text-fg-3">
+                {over
+                  ? `Over ${p.name}'s ${p.limit.toLocaleString()}-character limit`
+                  : folded
+                    ? `Feed cuts it at ${p.visible} characters`
+                    : ""}
+              </span>
+              <span className={`shrink-0 tabular-nums ${over ? "font-medium text-danger" : "text-fg-3"}`}>
+                {text.length.toLocaleString()} / {p.limit.toLocaleString()}
               </span>
             </div>
           </section>

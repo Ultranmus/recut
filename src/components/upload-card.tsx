@@ -120,6 +120,9 @@ export function UploadCard({ onNeedKey }: { onNeedKey: () => void }) {
         notice: warning,
       });
       router.push(`/studio/${projectId}`);
+      // Next keeps this page alive in the background; clear the finished job so going back shows a
+      // fresh upload card instead of a stale "100%" with the clock still running.
+      reset();
     } catch (err) {
       if (id !== run.current) return;
       setError(friendly(err));

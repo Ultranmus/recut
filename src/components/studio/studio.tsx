@@ -3,24 +3,24 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLearnings, addRules, getLearnings, getRules, useBrandRules, useLearnings } from "@/lib/brand-memory";
-import { addDays, getCalendar, isoDate, parseIso, schedule, startOfWeek, useCalendar } from "@/lib/calendar";
+import { addLearnings, addRules, getLearnings, getRules, removeRule, useBrandRules, useLearnings } from "@/lib/brand-memory";
+import { addDays, getCalendar, isoDate, moveEntry, parseIso, schedule, startOfWeek, unschedule, useCalendar } from "@/lib/calendar";
 import { enforceRules, type BrandRule } from "@/lib/brand-rules";
 import { paginate, wordsInRange } from "@/lib/captions";
-import { duration } from "@/lib/format";
+import { duration, timecode } from "@/lib/format";
 import { DEMO_ID, getProject, saveProject } from "@/lib/projects";
 import { briefAI, learnAI, planAI, rerankAI, rewriteAI } from "@/lib/studio-client";
-import type { ParsedBrief, RewriteMode, RewriteResult } from "@/lib/studio-ai";
+import type { BriefAction, ParsedBrief, RewriteMode, RewriteResult } from "@/lib/studio-ai";
 import { PLATFORMS, type Clip, type PlatformId, type Project, type Segment } from "@/lib/types";
 import { IconChevronLeft, IconFilm, IconScissors, IconSparkle, IconWave } from "../icons";
 import { TopBar } from "../top-bar";
 import { ClipPreview, type PlayerHandle } from "./clip-preview";
 import { BrandMemoryPanel } from "./brand-memory-panel";
 import { CalendarView, outcomeBadge } from "./calendar-view";
-import { CaptionPanel, ClipDetails, ClipList, EpisodeTimeline, TranscriptPanel, type ClipBadges, type PendingChange } from "./panels";
+import { CaptionPanel, ClipDetails, ClipList, EpisodeTimeline, OPEN_PREVIEW, TranscriptPanel, type ClipBadges, type PendingChange } from "./panels";
 import { useGoogleCalendarSync } from "@/lib/google-calendar";
 import { AutoScheduleDialog } from "./auto-schedule-dialog";
-import { ScheduleDialog } from "./schedule-dialog";
+import { formatTime, ScheduleDialog } from "./schedule-dialog";
 import { sendBrief, TalkToStudio, type BriefState } from "./talk-box";
 
 const ALL_PLATFORMS = PLATFORMS.map((p) => p.id);
@@ -324,9 +324,15 @@ export function Studio({ id }: { id: string }) {
         if (moved) done.push(`${moved} clip${moved === 1 ? "" : "s"} re-ranked`);
       }
 
+      // Everything else the creator could do by hand.
+      if (b.actions.length) {
+        setBriefStep("Doing what you asked…");
+        done.push(...runActions(b.actions, b.clipIds[0]));
+      }
+
       // Captions: write them when asked; otherwise show how any new rules change this clip.
       const target = clips.find((c) => c.id === b.clipIds[0]) ?? clip;
-      const onlyLogistics = (entries.length || saved.length || b.schedule.length || b.feedback.length) && !b.wantsCaptions;
+      const onlyLogistics = (entries.length || saved.length || b.schedule.length || b.feedback.length || b.actions.length || b.autoSchedule) && !b.wantsCaptions;
       if (b.wantsCaptions || (!onlyLogistics && (b.tone || b.platforms.length || b.topic))) {
         setBriefClipId(target.id);
         setSelectedId(target.id);
@@ -358,6 +364,197 @@ export function Studio({ id }: { id: string }) {
       setBriefError(err instanceof Error ? err.message : "Couldn't understand that brief.");
       setBriefState("error");
     }
+  }
+
+  /**
+   * Carries out the chat's studio actions (open, trim, hook, posts, rules, suggestions, caption look,
+   * play, preview, export) and returns a short line for each, for the reply.
+   */
+  function runActions(actions: BriefAction[], fallbackId?: string): string[] {
+    if (!project) return [];
+    const out: string[] = [];
+    // Clips change as actions run (trim, hook), so work on a local copy and commit once.
+    let list = clips;
+    let current = clips.find((c) => c.id === (fallbackId || selectedId)) ?? clip;
+    const pick = (id: string) => (id ? list.find((c) => c.id === id) : current) ?? current;
+    const put = (next: Clip) => {
+      list = list.map((c) => (c.id === next.id ? next : c));
+      current = next;
+    };
+    const words = project.transcript.words;
+    const snapStart = (t: number) => words.reduce((best, w) => (Math.abs(w.start - t) < Math.abs(best - t) ? w.start : best), words[0]?.start ?? t);
+    const snapEnd = (t: number) => words.reduce((best, w) => (Math.abs(w.end - t) < Math.abs(best - t) ? w.end : best), words[0]?.end ?? t);
+    const total = project.transcript.duration;
+    const postsFor = (clipId: string, date: string) =>
+      getCalendar().filter((e) => e.projectId === project.id && e.clipId === clipId && (!date || e.date === date));
+    const day = (d: string) => parseIso(d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+    for (const a of actions) {
+      switch (a.type) {
+        case "open": {
+          current = pick(a.clipId);
+          if (!current) break;
+          setView("studio");
+          out.push(`opened “${current.title}”`);
+          break;
+        }
+        case "view": {
+          if (a.target === "calendar") setView("calendar");
+          else if (a.target === "original" || a.target === "social") {
+            setView("studio");
+            player.current?.setView(a.target);
+          } else {
+            setView("studio");
+            setTab(a.target);
+          }
+          out.push(`showing ${a.target === "social" ? "the 9:16 preview" : a.target === "brand" ? "Brand memory" : a.target}`);
+          break;
+        }
+        case "trim": {
+          const c = pick(a.clipId);
+          if (!c) break;
+          let start = a.start ?? c.start + (a.startShift ?? 0);
+          let end = a.end ?? c.end + (a.endShift ?? 0);
+          if (a.length) end = start + a.length;
+          start = snapStart(Math.max(0, start));
+          end = snapEnd(Math.min(total, end));
+          if (end - start < 5) {
+            out.push(`couldn't trim “${c.title}” under 5 seconds`);
+            break;
+          }
+          put({ ...c, start, end });
+          out.push(`trimmed “${c.title}” to ${timecode(start)}–${timecode(end)}`);
+          break;
+        }
+        case "hook":
+        case "title": {
+          const c = pick(a.clipId);
+          if (!c) break;
+          put({ ...c, [a.type]: a.text });
+          out.push(`${a.type} changed to “${a.text}”`);
+          break;
+        }
+        case "create_clip": {
+          const start = snapStart(a.start);
+          const end = snapEnd(Math.min(total, a.end));
+          const text = wordsInRange(words, start, end).map((w) => w.word).join(" ");
+          const quote = (text.match(/^[^.!?]+[.!?]/)?.[0] ?? text).slice(0, 200);
+          const n = list.filter((c) => c.id.startsWith("custom")).length + 1;
+          const custom: Clip = {
+            id: `custom-${Date.now()}`,
+            title: `Custom clip ${n}`,
+            start,
+            end,
+            hook: quote.split(/\s+/).slice(0, 8).join(" "),
+            why: "",
+            score: 0,
+            captions: {
+              reels: `${quote}\n\nSave this and follow for more.\n\n#podcast #reels`,
+              linkedin: `"${quote}"\n\nA moment from this episode worth sharing. What's your take?`,
+              x: `"${quote.slice(0, 250)}"`,
+              shorts: `${quote.slice(0, 80)} #Shorts`,
+            },
+            hashtags: [],
+          };
+          for (const p of ALL_PLATFORMS) custom.captions[p] = enforceRules(custom.captions[p], getRules(), p);
+          list = [...list, custom];
+          current = custom;
+          out.push(`made “${custom.title}” from ${timecode(start)}–${timecode(end)}`);
+          break;
+        }
+        case "unschedule": {
+          const c = pick(a.clipId);
+          const posts = c ? postsFor(c.id, a.date) : [];
+          posts.forEach((e) => unschedule(e.id));
+          out.push(posts.length ? `removed ${posts.length} post${posts.length === 1 ? "" : "s"} of “${c!.title}”` : `no scheduled post of “${c?.title ?? "that clip"}” to remove`);
+          break;
+        }
+        case "move_post": {
+          const c = pick(a.clipId);
+          const post = c ? postsFor(c.id, "")[0] : undefined;
+          if (!post) {
+            out.push(`“${c?.title ?? "that clip"}” isn't on the calendar yet`);
+            break;
+          }
+          moveEntry(post.id, a.date, a.time || post.time);
+          setHighlight([post.id]);
+          setTimeout(() => setHighlight([]), 6000);
+          setWeekStart(startOfWeek(parseIso(a.date)));
+          out.push(`moved “${c!.title}” to ${day(a.date)}${a.time ? ` ${formatTime(a.time)}` : ""}`);
+          break;
+        }
+        case "delete_rule": {
+          const words2 = (t: string) => new Set(t.toLowerCase().match(/[a-z0-9']+/g) ?? []);
+          const want = words2(a.rule);
+          const best = getRules()
+            .map((r) => ({ r, overlap: [...words2(r.text)].filter((w) => want.has(w) && w.length > 2).length }))
+            .sort((x, y) => y.overlap - x.overlap)[0];
+          if (best && best.overlap > 0) {
+            removeRule(best.r.id);
+            out.push(`forgot the rule “${best.r.text}”`);
+          } else out.push(`no saved rule matches “${a.rule}”`);
+          break;
+        }
+        case "suggestions": {
+          const c = current;
+          if (!c) break;
+          const forClip = pending[c.id] ?? {};
+          const n = Object.keys(forClip).length;
+          if (!n) {
+            out.push("no suggestions waiting");
+            break;
+          }
+          if (a.decision === "accept") {
+            const captions = { ...c.captions };
+            for (const [p, ch] of Object.entries(forClip) as [PlatformId, PendingChange][]) captions[p] = ch.after;
+            put({ ...c, captions });
+          }
+          setPending((p) => ({ ...p, [c.id]: {} }));
+          out.push(`${a.decision === "accept" ? "accepted" : "discarded"} ${n} suggestion${n === 1 ? "" : "s"}`);
+          break;
+        }
+        case "captions_look": {
+          const options = {
+            ...(a.size ? { size: a.size } : {}),
+            ...(a.position ? { position: a.position } : {}),
+            ...(a.caps !== null ? { caps: a.caps } : {}),
+            ...(a.background !== null ? { background: a.background } : {}),
+          };
+          setView("studio");
+          player.current?.setView("social");
+          player.current?.setLook({ style: a.style || undefined, options });
+          out.push("updated the 9:16 captions");
+          break;
+        }
+        case "play":
+          setView("studio");
+          setTimeout(() => player.current?.play(), 100);
+          out.push(`playing “${current?.title}”`);
+          break;
+        case "preview": {
+          const c = pick(a.clipId);
+          if (!c) break;
+          current = c;
+          setView("studio");
+          setTab("captions");
+          setTimeout(() => window.dispatchEvent(new CustomEvent(OPEN_PREVIEW, { detail: a.platform })), 200);
+          out.push(`opened the ${PLATFORMS.find((p) => p.id === a.platform)?.short} preview, ready to post`);
+          break;
+        }
+        case "export_video": {
+          const c = pick(a.clipId);
+          if (!c) break;
+          current = c;
+          setView("studio");
+          setTimeout(() => player.current?.exportVideo(), 300);
+          out.push(`exporting the 9:16 video of “${c.title}”`);
+          break;
+        }
+      }
+    }
+    if (list !== clips) setClips(list);
+    if (current && current.id !== selectedId) setSelectedId(current.id);
+    return out;
   }
 
   /** After the rule set changes, show how it would change this clip's captions. */

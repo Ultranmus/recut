@@ -49,7 +49,33 @@ export type ParsedBrief = {
   digressions: string[];
   /** "Auto-schedule my clips, 2 a day": plan several clips at once with the AI planner. */
   autoSchedule: { clipIds: string[]; perDay: number } | null;
+  /** Anything else the creator could do by hand, in the order they asked for it. */
+  actions: BriefAction[];
 };
+
+/** Studio actions the chat can perform. Clip ids are resolved; empty means the clip in view. */
+export type BriefAction =
+  | { type: "open"; clipId: string }
+  | { type: "view"; target: "captions" | "brand" | "transcript" | "calendar" | "original" | "social" }
+  | { type: "trim"; clipId: string; start: number | null; end: number | null; startShift: number | null; endShift: number | null; length: number | null }
+  | { type: "hook"; clipId: string; text: string }
+  | { type: "title"; clipId: string; text: string }
+  | { type: "create_clip"; start: number; end: number }
+  | { type: "unschedule"; clipId: string; date: string }
+  | { type: "move_post"; clipId: string; date: string; time: string }
+  | { type: "delete_rule"; rule: string }
+  | { type: "suggestions"; decision: "accept" | "reject" }
+  | {
+      type: "captions_look";
+      style: "pop" | "box" | "minimal" | "";
+      size: "s" | "m" | "l" | "";
+      position: "top" | "middle" | "bottom" | "";
+      caps: boolean | null;
+      background: boolean | null;
+    }
+  | { type: "play" }
+  | { type: "preview"; clipId: string; platform: PlatformId }
+  | { type: "export_video"; clipId: string };
 
 export type RewriteMode = "brief" | "rules";
 
@@ -124,13 +150,30 @@ Return JSON:
 "corrections":[{"from":"what they first said","to":"what they settled on"}],
 "fillers":["distinct filler words or phrases you ignored, max 8"],
 "digressions":["off-topic tangents you set aside, each paraphrased in under 8 words, e.g. 'aside about their cat'"],
-"autoSchedule":null or {"clipIds":["clip ids to plan, [] means the creator's best clips"],"count":<how many clips, or null>,"perDay":<posts per day they asked for, default 1>}}
+"autoSchedule":null or {"clipIds":["clip ids to plan, [] means the creator's best clips"],"count":<how many clips, or null>,"perDay":<posts per day they asked for, default 1>},
+"actions":[other things to do in the studio, in order; [] if none. Each is one of:
+  {"type":"open","clipId":"..."}  show/select/go to a clip
+  {"type":"view","target":"captions|brand|transcript|calendar|original|social"}  switch tab or preview ("9:16" = social, "brand memory" = brand)
+  {"type":"trim","clipId":"","start":"m:ss or null","end":"m:ss or null","startShift":<seconds, + later / - earlier, or null>,"endShift":<seconds or null>,"length":<target seconds or null>}
+  {"type":"hook","clipId":"","text":"new hook line"}
+  {"type":"title","clipId":"","text":"new clip title"}
+  {"type":"create_clip","start":"m:ss","end":"m:ss"}  a new custom clip from the episode
+  {"type":"unschedule","clipId":"","day":<day number or null for all its posts>}  remove/cancel a scheduled post
+  {"type":"move_post","clipId":"","day":<day number>,"time":"HH:MM 24h or empty"}  reschedule an existing post
+  {"type":"delete_rule","rule":"the rule to forget, in their words"}
+  {"type":"suggestions","decision":"accept|reject"}  accept or discard pending caption suggestions
+  {"type":"captions_look","style":"pop|box|minimal|","size":"s|m|l|","position":"top|middle|bottom|","caps":true|false|null,"background":true|false|null}  how captions look on the 9:16 video
+  {"type":"play"}
+  {"type":"preview","clipId":"","platform":"reels|linkedin|x|shorts"}  show how the post looks / get it ready to post
+  {"type":"export_video","clipId":""}  download the 9:16 video
+  clipId "" means the clip currently being discussed.]}
 
 How to read the brief:
 - Ignore fillers (um, uh, like, you know, so, basically, I mean, kind of, sort of, okay so) and false starts.
 - Digressions: set aside tangents that aren't instructions (stories, asides, thinking out loud, unrelated chatter). List them in "digressions" and never act on them.
 - Self-corrections: the LAST version wins. Phrases like "no wait", "actually", "scratch that", "sorry", "I mean", "make that", "not X, Y" replace what came before. Record each one in "corrections" and never act on the replaced part.
 - A brand rule must hold for all future content: words like always, never, every time, from now on, our brand, we don't, no <thing>. A one-off request for this post ("make this one funny") is tone, not a rule.
+- Anything else they ask you to do in the studio (open a clip, trim it, change its hook, remove or move a post, forget a rule, accept suggestions, change how captions look, play, preview or export) goes in "actions". Don't also put it in schedule or rules.
 - Asking you to plan or spread out several clips without naming a day for each ("auto-schedule my clips", "schedule the top 3 for next week", "plan my posts, two a day") is autoSchedule, not schedule. Leave schedule empty for those clips.
 - "Post/schedule X on <day>" is a schedule entry. Resolve weekdays and relative days ("Tuesday", "tomorrow", "next Friday") to a day number from the calendar list; a bare weekday means its next occurrence (today counts if it is that day).
 - "It got N views", "it did great", "it flopped", "nobody watched" is feedback. Spoken numbers become digits ("forty thousand" = 40000). outcome: hit for strong results or praise, flop for poor results, average otherwise. If no clip is named, use the clip the brief is about, else leave clipId empty.
@@ -195,7 +238,89 @@ How to read the brief:
     fillers: asStrings(r.fillers, 8),
     digressions: asStrings(r.digressions, 5),
     autoSchedule: parseAutoSchedule(r.autoSchedule, clips, ids),
+    actions: parseActions(r.actions, (id, q) => (asString(id) || asString(q) ? resolve(id, q) : ""), dateFor),
   };
+}
+
+/** "13:20" or "1:02:05" → seconds; numbers pass through. */
+function seconds(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const m = asString(v).match(/^(?:(\d+):)?(\d{1,2}):(\d{2}(?:\.\d+)?)$/);
+  if (!m) return null;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[]) => (allowed.includes(asString(v) as T) ? (asString(v) as T) : ("" as T | ""));
+const bool = (v: unknown) => (v === true ? true : v === false ? false : null);
+
+function parseActions(v: unknown, clip: (id: unknown, q: unknown) => string, dateFor: (day: unknown, date: unknown) => string): BriefAction[] {
+  const out: BriefAction[] = [];
+  for (const a of asObjects(v).slice(0, 10)) {
+    const id = clip(a.clipId, a.clipQuery);
+    switch (asString(a.type)) {
+      case "open":
+        if (id) out.push({ type: "open", clipId: id });
+        break;
+      case "view": {
+        const target = oneOf(a.target, ["captions", "brand", "transcript", "calendar", "original", "social"] as const);
+        if (target) out.push({ type: "view", target });
+        break;
+      }
+      case "trim": {
+        const t = { start: seconds(a.start), end: seconds(a.end), startShift: num(a.startShift), endShift: num(a.endShift), length: num(a.length) };
+        if (Object.values(t).some((x) => x !== null)) out.push({ type: "trim", clipId: id, ...t });
+        break;
+      }
+      case "hook":
+      case "title":
+        if (asString(a.text)) out.push({ type: asString(a.type) as "hook" | "title", clipId: id, text: asString(a.text).slice(0, 90) });
+        break;
+      case "create_clip": {
+        const start = seconds(a.start);
+        const end = seconds(a.end);
+        if (start !== null && end !== null && end - start >= 5) out.push({ type: "create_clip", start, end });
+        break;
+      }
+      case "unschedule":
+        out.push({ type: "unschedule", clipId: id, date: a.day === null || a.day === undefined ? "" : dateFor(a.day, a.date) });
+        break;
+      case "move_post": {
+        const date = dateFor(a.day, a.date);
+        if (date) out.push({ type: "move_post", clipId: id, date, time: /^\d{1,2}:\d{2}$/.test(asString(a.time)) ? asString(a.time).padStart(5, "0") : "" });
+        break;
+      }
+      case "delete_rule":
+        if (asString(a.rule)) out.push({ type: "delete_rule", rule: asString(a.rule) });
+        break;
+      case "suggestions": {
+        const decision = oneOf(a.decision, ["accept", "reject"] as const);
+        if (decision) out.push({ type: "suggestions", decision });
+        break;
+      }
+      case "captions_look":
+        out.push({
+          type: "captions_look",
+          style: oneOf(a.style, ["pop", "box", "minimal"] as const),
+          size: oneOf(a.size, ["s", "m", "l"] as const),
+          position: oneOf(a.position, ["top", "middle", "bottom"] as const),
+          caps: bool(a.caps),
+          background: bool(a.background),
+        });
+        break;
+      case "play":
+        out.push({ type: "play" });
+        break;
+      case "preview": {
+        const platform = oneOf(a.platform, PLATFORM_IDS);
+        if (platform) out.push({ type: "preview", clipId: id, platform });
+        break;
+      }
+      case "export_video":
+        out.push({ type: "export_video", clipId: id });
+        break;
+    }
+  }
+  return out;
 }
 
 function parseAutoSchedule(v: unknown, clips: ClipRef[], ids: Set<string>): ParsedBrief["autoSchedule"] {

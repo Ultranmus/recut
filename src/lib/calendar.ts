@@ -32,8 +32,8 @@ export function schedule(items: Omit<CalendarEntry, "id" | "createdAt">[]) {
 
 export const unschedule = (id: string) => store.write(store.read().filter((e) => e.id !== id));
 
-export function moveEntry(id: string, date: string) {
-  store.write(store.read().map((e) => (e.id === id ? { ...e, date } : e)));
+export function moveEntry(id: string, date: string, time?: string) {
+  store.write(store.read().map((e) => (e.id === id ? { ...e, date, ...(time !== undefined ? { time } : {}) } : e)));
 }
 
 /** YYYY-MM-DD in the browser's local time zone. */
