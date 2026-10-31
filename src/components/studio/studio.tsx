@@ -130,6 +130,19 @@ export function Studio({ id }: { id: string }) {
 
   const scheduledLabel = (clipId: string) => badges[clipId]?.scheduled?.replace("📅 ", "");
 
+  /** Brings the first suggested rewrite into view and pulses it, so "Review captions" visibly lands. */
+  function revealSuggestion() {
+    setTimeout(() => {
+      const el = document.querySelector<HTMLElement>("[data-suggestion]");
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.animate(
+        [{ boxShadow: "0 0 0 0 rgba(10,132,255,0.8)" }, { boxShadow: "0 0 0 6px rgba(10,132,255,0)" }],
+        { duration: 700, iterations: 2, easing: "ease-out" }
+      );
+    }, 120);
+  }
+
   function updateClip(next: Clip) {
     setClips((cs) => cs.map((c) => (c.id === next.id ? next : c)));
   }
@@ -634,6 +647,7 @@ export function Studio({ id }: { id: string }) {
           else {
             setView("studio");
             setTab(target);
+            if (target === "captions") revealSuggestion();
           }
         }}
         onClear={() => {

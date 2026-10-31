@@ -51,8 +51,14 @@ export function ScheduleDialog({
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
-    // Bring the chosen clip and day into view inside their scrolling lists.
-    d?.querySelectorAll<HTMLElement>("[data-chosen]").forEach((el) => el.scrollIntoView({ block: "nearest", inline: "center" }));
+    // Bring the chosen clip and day into view by scrolling only their own lists. scrollIntoView
+    // would also shift the dialog body sideways and cut off its left edge.
+    d?.querySelectorAll<HTMLElement>("[data-chosen]").forEach((el) => {
+      const list = el.parentElement;
+      if (!list) return;
+      if (list.scrollWidth > list.clientWidth) list.scrollLeft = el.offsetLeft - (list.clientWidth - el.offsetWidth) / 2;
+      else list.scrollTop = el.offsetTop - (list.clientHeight - el.offsetHeight) / 2;
+    });
   }, []);
 
   const toggle = (id: PlatformId) => setPlatforms((ps) => (ps.includes(id) ? ps.filter((p) => p !== id) : [...ps, id]));
@@ -63,10 +69,10 @@ export function ScheduleDialog({
       ref={ref}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
-      className="m-auto max-h-[92dvh] w-[min(94vw,34rem)] overflow-visible rounded-2xl bg-transparent p-0 text-fg backdrop:bg-black/55 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[92dvh] w-[min(94vw,34rem)] overflow-hidden rounded-2xl bg-transparent p-0 text-fg backdrop:bg-black/55 backdrop:backdrop-blur-sm"
       aria-label="Schedule a post"
     >
-      <div className="window rise flex max-h-[92dvh] flex-col rounded-2xl">
+      <div className="window rise flex max-h-[92dvh] flex-col overflow-hidden rounded-2xl">
         <div className="flex items-center justify-between border-b border-hairline px-5 py-3.5">
           <div>
             <h2 className="text-[15px] font-semibold">Schedule a post</h2>
@@ -77,10 +83,10 @@ export function ScheduleDialog({
           </button>
         </div>
 
-        <div className="scroll-thin min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <div className="scroll-thin min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-5 py-4">
           <fieldset>
             <legend className="label mb-2">Clip</legend>
-            <div className="scroll-thin max-h-52 space-y-1.5 overflow-y-auto pr-1" role="radiogroup">
+            <div className="scroll-thin relative max-h-52 space-y-1.5 overflow-y-auto pr-1" role="radiogroup">
               {clips.map((c, i) => {
                 const on = c.id === selected;
                 return (
@@ -115,7 +121,7 @@ export function ScheduleDialog({
 
           <fieldset>
             <legend className="label mb-2">Day</legend>
-            <div className="scroll-thin -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5 [mask-image:linear-gradient(to_right,black_88%,transparent)]">
+            <div className="scroll-thin relative -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5 [mask-image:linear-gradient(to_right,black_88%,transparent)]">
               {days.map((d) => {
                 const on = d === day;
                 return (

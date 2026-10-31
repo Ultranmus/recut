@@ -175,7 +175,7 @@ function Suggestion({ change, onAccept, onReject }: { change: PendingChange; onA
   const rewritten = keptShare(raw) < 0.4;
   const [view, setView] = useState<"changes" | "suggested" | "current">(rewritten ? "suggested" : "changes");
   return (
-    <div className="rise overflow-hidden rounded-xl border border-accent/40 bg-accent/[0.05] shadow-[0_10px_30px_-14px_rgba(10,132,255,0.55)]">
+    <div data-suggestion className="rise overflow-hidden rounded-xl border border-accent/40 bg-accent/[0.05] shadow-[0_10px_30px_-14px_rgba(10,132,255,0.55)]">
       <div className="space-y-1 px-3 pb-2.5 pt-3">
         <p className="flex items-center gap-2 text-[12px] font-semibold text-accent">
           <IconSparkle size={13} className="shrink-0" />
@@ -456,34 +456,52 @@ export function EpisodeTimeline({
   time: number;
   onSelect: (id: string) => void;
 }) {
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="mx-auto w-full max-w-[560px]">
-      <div className="mb-1.5 flex justify-between text-[10px] text-fg-3">
-        <span className="label text-[10px]">Full episode</span>
-        <span className="font-mono tabular-nums">{timecode(total)}</span>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <span className="label">Full episode</span>
+        <span className="text-[11px] text-fg-3">{clips.length} clips · click one to preview</span>
       </div>
-      <div className="relative h-7 rounded-lg bg-white/[0.05] ring-1 ring-inset ring-white/5">
+      <div className="relative h-10 rounded-xl bg-white/[0.04] ring-1 ring-inset ring-white/[0.06]">
+        {ticks.slice(1, -1).map((f) => (
+          <span key={f} aria-hidden className="absolute inset-y-2 w-px bg-white/[0.06]" style={{ left: `${f * 100}%` }} />
+        ))}
         {clips.map((c, i) => {
           const active = c.id === selectedId;
           return (
             <button
               key={c.id}
               onClick={() => onSelect(c.id)}
-              title={`${c.title} · ${timecode(c.start)}–${timecode(c.end)}`}
-              aria-label={`Select ${c.title}`}
-              className={`absolute inset-y-1 rounded-[5px] text-[9px] font-semibold transition-all duration-200 ${
-                active ? "z-10 bg-accent text-white shadow-[0_0_12px_rgba(10,132,255,0.6)]" : "bg-white/20 text-transparent hover:bg-white/35"
+              title={`#${i + 1} ${c.title} · ${timecode(c.start)}–${timecode(c.end)}`}
+              aria-label={`Clip ${i + 1}: ${c.title}, ${timecode(c.start)} to ${timecode(c.end)}`}
+              aria-current={active || undefined}
+              className={`absolute inset-y-1.5 grid place-items-center rounded-md text-[10px] font-semibold tabular-nums transition-all duration-200 ${
+                active
+                  ? "z-10 bg-accent text-white shadow-[0_0_14px_rgba(10,132,255,0.65)] ring-1 ring-white/40"
+                  : "bg-white/[0.14] text-fg-2 hover:bg-white/25 hover:text-fg"
               }`}
-              style={{ left: `${(c.start / total) * 100}%`, width: `max(6px, ${((c.end - c.start) / total) * 100}%)` }}
+              style={{ left: `${(c.start / total) * 100}%`, width: `max(16px, ${((c.end - c.start) / total) * 100}%)` }}
             >
-              {active ? i + 1 : ""}
+              {i + 1}
             </button>
           );
         })}
         <span
-          className="pointer-events-none absolute inset-y-0 z-20 w-px bg-white shadow-[0_0_6px_white]"
+          className="pointer-events-none absolute -inset-y-0.5 z-20 w-0.5 rounded-full bg-white shadow-[0_0_8px_white]"
           style={{ left: `${Math.min(100, (time / total) * 100)}%` }}
         />
+      </div>
+      <div className="relative mt-1.5 h-3.5 font-mono text-[10px] tabular-nums text-fg-3">
+        {ticks.map((f) => (
+          <span
+            key={f}
+            className="absolute"
+            style={f === 1 ? { right: 0 } : { left: `${f * 100}%`, transform: f === 0 ? undefined : "translateX(-50%)" }}
+          >
+            {timecode(f * total)}
+          </span>
+        ))}
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CaptionPage } from "@/lib/captions";
 import { toSrt } from "@/lib/captions";
-import { download, slugify, timecode } from "@/lib/format";
+import { download, duration, slugify, timecode } from "@/lib/format";
 import {
   CAPTION_STYLES,
   H,
@@ -16,7 +16,7 @@ import {
   type CaptionStyle,
 } from "@/lib/renderer";
 import type { Clip, Project, Word } from "@/lib/types";
-import { IconDownload, IconFilm, IconPause, IconPlay, IconText, IconWave } from "../icons";
+import { IconChevronLeft, IconDownload, IconFilm, IconPause, IconPlay, IconText, IconWave } from "../icons";
 
 type Graph = {
   ctx: AudioContext;
@@ -72,10 +72,13 @@ export function ClipPreview({
   const isVideo = project.kind === "video";
   const subtitle = project.source?.show ?? (isVideo ? "" : "Podcast");
 
+  // A speech-shaped waveform for the clip, from word timings, so it reads before anything plays.
+  const bars = useMemo(() => speechBars(words, clip.start, clip.end), [words, clip.start, clip.end]);
+
   // Latest values for the render loop, which runs outside React's render cycle.
-  const live = useRef({ clip, pages, style, accent, showHook, onTime, view });
+  const live = useRef({ clip, pages, style, accent, showHook, onTime, view, bars });
   useEffect(() => {
-    live.current = { clip, pages, style, accent, showHook, onTime, view };
+    live.current = { clip, pages, style, accent, showHook, onTime, view, bars };
   });
 
   useEffect(() => {
@@ -106,7 +109,7 @@ export function ClipPreview({
       if (g) g.analyser.getByteFrequencyData(g.freq);
       updateLevels(levels.current, g?.freq ?? null, Boolean(m && !m.paused), ts / 1000);
       if (L.view === "original") {
-        if (!isVideo) drawMiniWave(waveRef.current, levels.current, L.accent);
+        if (!isVideo) drawScrubWave(waveRef.current, L.bars, (t - L.clip.start) / (L.clip.end - L.clip.start), levels.current, Boolean(m && !m.paused), L.accent);
       } else if (background.current) {
         drawFrame(ctx, {
           time: t,
@@ -275,6 +278,7 @@ export function ClipPreview({
   const dur = clip.end - clip.start;
   const pct = Math.min(100, Math.max(0, ((time - clip.start) / dur) * 100));
   const exporting = exportProgress !== null;
+  const audioOriginal = view === "original" && !isVideo;
 
   const offscreen = "pointer-events-none fixed -left-[9999px] top-0 h-px w-px overflow-hidden opacity-0";
   const playOverlay = (
@@ -317,13 +321,13 @@ export function ClipPreview({
 
         {/* Original: plays the source file itself, limited to the clip's start/end. Nothing is cut. */}
         <div className={view === "original" ? "flex justify-center" : offscreen} aria-hidden={view !== "original"}>
+          {isVideo ? (
           <button
             onClick={toggle}
             aria-label={playing ? "Pause original" : "Play original"}
             className="group relative block w-full max-w-[560px] overflow-hidden rounded-2xl bg-black shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/12 outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            {isVideo ? (
-              <video
+            <video
                 ref={mediaRef}
                 src={mediaUrl}
                 playsInline
@@ -332,22 +336,77 @@ export function ClipPreview({
                 onPlay={() => setPlaying(true)}
                 onPause={() => setPlaying(false)}
                 onLoadedMetadata={(e) => (e.currentTarget.currentTime = clip.start)}
-          onError={() => setError("Couldn't load this episode's media. Refresh the page, or re-upload the file if it was removed.")}
+                onError={() => setError("Couldn't load this episode's media. Refresh the page, or re-upload the file if it was removed.")}
               />
-            ) : (
-              <span className="flex flex-col items-center gap-5 bg-gradient-to-b from-white/[0.06] to-transparent px-6 pb-6 pt-7">
-                <span className="relative grid size-36 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent via-accent-2 to-accent-3 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {project.cover ? <img src={project.cover} alt="" className="size-full object-cover" /> : <IconWave size={40} />}
-                </span>
-                <canvas ref={waveRef} width={1040} height={160} className="h-16 w-full max-w-[420px]" />
-                <span className="text-xs text-fg-3">
-                  Original audio · {timecode(clip.start)} → {timecode(clip.end)} of {timecode(project.transcript.duration)}
-                </span>
-              </span>
-            )}
-            {!playing && isVideo ? playOverlay : null}
+            {!playing ? playOverlay : null}
           </button>
+          ) : (
+            <div className="w-full max-w-[560px] rounded-2xl bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_30px_80px_-24px_rgba(0,0,0,0.9)] ring-1 ring-white/10 sm:p-5">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={toggle}
+                  aria-label={playing ? "Pause original" : "Play original"}
+                  className="group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-accent via-accent-2 to-accent-3 shadow-[0_14px_34px_-12px_rgba(0,0,0,0.9)] ring-1 ring-white/10 outline-none focus-visible:ring-2 focus-visible:ring-accent sm:size-24"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {project.cover ? <img src={project.cover} alt="" className="absolute inset-0 size-full object-cover" /> : <IconWave size={34} />}
+                  <span
+                    className={`absolute inset-0 grid place-items-center bg-black/35 transition-opacity ${
+                      playing ? "opacity-0 group-hover:opacity-100" : "opacity-100 group-hover:bg-black/45"
+                    }`}
+                  >
+                    <span className="grid size-10 place-items-center rounded-full bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-md">
+                      {playing ? <IconPause size={17} /> : <IconPlay size={17} className="translate-x-px" />}
+                    </span>
+                  </span>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-accent">
+                    {playing ? <EqBars /> : null}
+                    {playing ? "Playing original audio" : "Original audio"}
+                  </p>
+                  <p className="mt-0.5 truncate text-[15px] font-semibold tracking-tight">{clip.title}</p>
+                  <p className="mt-1 font-mono text-[11px] tabular-nums text-fg-3">
+                    {timecode(clip.start)} → {timecode(clip.end)} · {duration(dur)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-fg-3">From the {timecode(project.transcript.duration)} episode. Nothing is cut.</p>
+                </div>
+              </div>
+
+              <div
+                role="slider"
+                tabIndex={0}
+                aria-label="Seek within clip"
+                aria-valuemin={0}
+                aria-valuemax={Math.round(dur)}
+                aria-valuenow={Math.round(Math.max(0, time - clip.start))}
+                aria-valuetext={`${timecode(Math.max(0, time - clip.start))} of ${timecode(dur)}`}
+                className="mt-4 cursor-pointer touch-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  const r = e.currentTarget.getBoundingClientRect();
+                  seek(clip.start + ((e.clientX - r.left) / r.width) * dur);
+                }}
+                onPointerMove={(e) => {
+                  if (!e.buttons) return;
+                  const r = e.currentTarget.getBoundingClientRect();
+                  seek(clip.start + ((e.clientX - r.left) / r.width) * dur);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    seek(time + (e.key === "ArrowLeft" ? -2 : 2));
+                  }
+                }}
+              >
+                <canvas ref={waveRef} width={1120} height={150} className="block h-[75px] w-full" />
+              </div>
+              <div className="mt-1.5 flex justify-between font-mono text-[11px] tabular-nums text-fg-3">
+                <span>{timecode(Math.max(0, time - clip.start))}</span>
+                <span>-{timecode(Math.max(0, clip.end - time))}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 9:16 social render: same media, drawn to a canvas with hook and captions. */}
@@ -370,7 +429,27 @@ export function ClipPreview({
       </div>
 
       {/* Transport */}
-      <div className="mt-5 w-full max-w-md">
+      <div className={`mt-5 w-full ${audioOriginal ? "max-w-[560px]" : "max-w-md"}`}>
+        {audioOriginal ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={toggle}
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-white text-black shadow-[0_8px_24px_-8px_rgba(255,255,255,0.5)] transition-transform active:scale-95"
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              {playing ? <IconPause size={17} /> : <IconPlay size={17} className="translate-x-px" />}
+            </button>
+            <span className="hidden text-[11px] text-fg-3 sm:inline">
+              <kbd className="rounded border border-hairline-strong bg-white/5 px-1 font-sans text-[10px] text-fg-2">Space</kbd> to play
+            </span>
+            <div className="ml-auto flex items-center gap-2" title="Trim moves one word at a time, so clips never start or end mid-word">
+              <span className="label hidden sm:inline">Trim</span>
+              <TrimControl label="Start" value={clip.start} onDec={() => nudge("start", -1)} onInc={() => nudge("start", 1)} />
+              <TrimControl label="End" value={clip.end} onDec={() => nudge("end", -1)} onInc={() => nudge("end", 1)} />
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="flex items-center gap-3">
           <button
             onClick={toggle}
@@ -419,6 +498,8 @@ export function ClipPreview({
           )}
           <TrimControl label="End" value={clip.end} onDec={() => nudge("end", -1)} onInc={() => nudge("end", 1)} />
         </div>
+        </>
+        )}
 
         {view === "social" ? (
           <>
@@ -470,7 +551,7 @@ export function ClipPreview({
               </p>
             )}
           </>
-        ) : (
+        ) : audioOriginal ? null : (
           <p className="mt-4 text-center text-[11px] text-fg-3">
             Plays the original file from {timecode(clip.start)} to {timecode(clip.end)}. Nothing is cut.
           </p>
@@ -481,39 +562,83 @@ export function ClipPreview({
   );
 }
 
-/** Small live waveform for the original-audio view. */
-function drawMiniWave(canvas: HTMLCanvasElement | null, levels: Float32Array, accent: string) {
+/** Bar heights shaped like the clip's speech: busier where more words are spoken, low in pauses. */
+function speechBars(words: Word[], start: number, end: number, n = 96) {
+  const out = new Float32Array(n);
+  const step = (end - start) / n;
+  for (const w of words) {
+    if (w.end <= start || w.start >= end) continue;
+    const a = Math.max(0, Math.floor((w.start - start) / step));
+    const b = Math.min(n - 1, Math.floor((w.end - start) / step));
+    for (let k = a; k <= b; k++) out[k] += 0.6 + Math.min(w.word.length, 10) / 12;
+  }
+  const max = Math.max(...out, 0.001);
+  for (let k = 0; k < n; k++) {
+    // Fixed per-bar jitter so the shape looks like audio but stays the same between renders.
+    const jitter = ((Math.sin(k * 12.9898 + start) * 43758.5453) % 1 + 1) % 1;
+    out[k] = 0.1 + 0.9 * Math.sqrt(out[k] / max) * (0.7 + 0.3 * jitter);
+  }
+  return out;
+}
+
+/** The scrubber: played bars in the accent gradient, the rest dim, nudged by the live audio level. */
+function drawScrubWave(
+  canvas: HTMLCanvasElement | null,
+  bars: Float32Array,
+  progress: number,
+  levels: Float32Array,
+  playing: boolean,
+  accent: string
+) {
   const ctx = canvas?.getContext("2d");
   if (!canvas || !ctx) return;
   const { width: w, height: h } = canvas;
   ctx.clearRect(0, 0, w, h);
-  const n = levels.length;
-  const gap = 12;
+  const n = bars.length;
+  const gap = 4;
   const bw = (w - gap * (n - 1)) / n;
+  const p = Math.min(1, Math.max(0, progress));
   const g = ctx.createLinearGradient(0, 0, w, 0);
   g.addColorStop(0, accent);
   g.addColorStop(1, "#bf5af2");
-  ctx.fillStyle = g;
+  let level = 0;
+  for (const l of levels) level += l;
+  level /= levels.length;
   for (let i = 0; i < n; i++) {
-    const bh = 10 + levels[i] * (h - 14);
+    const played = (i + 0.5) / n <= p;
+    const near = playing && Math.abs((i + 0.5) / n - p) < 0.05;
+    const bh = Math.max(6, bars[i] * (h - 8) * (near ? 0.85 + level * 0.6 : 1));
+    ctx.fillStyle = played ? g : "rgba(255,255,255,0.16)";
     ctx.beginPath();
     ctx.roundRect(i * (bw + gap), (h - bh) / 2, bw, bh, bw / 2);
     ctx.fill();
   }
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.fillRect(Math.round(p * w) - 2, 0, 4, h);
+}
+
+function EqBars() {
+  return (
+    <span className="flex h-2.5 items-end gap-px" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="w-[3px] origin-bottom rounded-sm bg-accent" style={{ height: "100%", animation: `eq 0.${5 + i}s ease-in-out ${i * 0.12}s infinite alternate` }} />
+      ))}
+    </span>
+  );
 }
 
 function TrimControl({ label, value, onDec, onInc }: { label: string; value: number; onDec: () => void; onInc: () => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-hairline bg-white/[0.03] p-0.5">
-      <button className="btn btn-ghost h-7 w-7 p-0 text-base" onClick={onDec} aria-label={`${label} one word earlier`}>
-        ‹
+    <div className="flex h-9 items-center rounded-lg border border-hairline bg-white/[0.04]">
+      <button className="grid h-full w-7 place-items-center rounded-l-lg text-fg-2 hover:bg-white/8 hover:text-fg" onClick={onDec} aria-label={`${label} one word earlier`}>
+        <IconChevronLeft size={14} />
       </button>
-      <div className="w-14 text-center leading-none">
-        <p className="text-[10px] text-fg-3">{label}</p>
-        <p className="font-mono text-[11px] tabular-nums">{timecode(value)}</p>
+      <div className="min-w-[3.25rem] px-0.5 text-center leading-none">
+        <p className="text-[9px] font-semibold uppercase tracking-wide text-fg-3">{label}</p>
+        <p className="mt-0.5 font-mono text-[12px] tabular-nums">{timecode(value)}</p>
       </div>
-      <button className="btn btn-ghost h-7 w-7 p-0 text-base" onClick={onInc} aria-label={`${label} one word later`}>
-        ›
+      <button className="grid h-full w-7 place-items-center rounded-r-lg text-fg-2 hover:bg-white/8 hover:text-fg" onClick={onInc} aria-label={`${label} one word later`}>
+        <IconChevronLeft size={14} className="rotate-180" />
       </button>
     </div>
   );

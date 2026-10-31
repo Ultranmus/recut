@@ -224,7 +224,7 @@ export function TalkToStudio({
     <section
       data-studio-chat
       aria-label="Talk to your studio"
-      className={`window rise fixed inset-x-2 bottom-2 z-40 flex bg-[rgba(20,20,24,0.97)] h-[min(86dvh,44rem)] flex-col overflow-hidden rounded-2xl sm:inset-x-auto sm:bottom-4 sm:left-4 sm:h-[min(calc(100dvh-6rem),42rem)] sm:w-[25rem] ${
+      className={`window rise fixed inset-x-2 bottom-2 z-40 flex bg-[#141418] backdrop-filter-none [-webkit-backdrop-filter:none] h-[min(86dvh,44rem)] flex-col overflow-hidden rounded-2xl sm:inset-x-auto sm:bottom-4 sm:left-4 sm:h-[min(calc(100dvh-6rem),42rem)] sm:w-[25rem] ${
         busy || recording ? "shadow-[0_0_0_1px_rgba(10,132,255,0.45),0_30px_80px_-20px_rgba(10,132,255,0.45)]" : ""
       }`}
     >
